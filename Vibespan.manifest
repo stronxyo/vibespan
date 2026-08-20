@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <!-- uiAccess puts the window in the band reserved for accessibility tools, which is
+             the only supported way for third-party code to draw above the taskbar. Windows
+             grants it only to a signed binary installed under an admin-only path, and
+             silently ignores it otherwise - the app logs which it got at startup.
+             asInvoker, NOT requireAdministrator: this never needs elevation. -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="true" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <asmv3:application xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+    <asmv3:windowsSettings>
+      <!-- System DPI awareness, deliberately not PerMonitorV2. V2 breaks Window.Left/Top
+           across monitors with different scale factors (dotnet/wpf#4127) and mis-scales
+           programmatically opened context menus (dotnet/wpf#3874) - which is exactly how the
+           tray menu opens. The user-facing scale setting covers the cost. -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+    </asmv3:windowsSettings>
+  </asmv3:application>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />  <!-- Windows 10 / 11 -->
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}" />
+    </application>
+  </compatibility>
+</assembly>

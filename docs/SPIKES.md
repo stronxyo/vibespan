@@ -135,6 +135,30 @@ Two further traps worth recording:
 
 ---
 
+## 6. A uiAccess binary outside a secure location will not START — found during install
+
+Documented behaviour is that Windows "silently ignores" the `uiAccess` flag when its
+conditions are not met. That is not what happens. Running a `uiAccess="true"` binary that is
+neither signed nor in an admin-only directory fails outright:
+
+```
+[ERROR] This command cannot be run due to the error: A referral was returned from the server.
+```
+
+The process never starts — there is no fall back to a normal window. This surfaced when the
+per-user (`-NoUiAccess`) install path was still building against the uiAccess manifest.
+
+**Consequence:** the two install modes need two different manifests. `Installer.ps1` keeps one
+manifest as the source of truth and patches `uiAccess="true"` to `"false"` in a temp copy for
+the per-user build.
+
+It also means the failure mode for a *broken* uiAccess install is louder than expected — a
+re-signed or moved binary will refuse to launch rather than quietly losing its Z-order. The
+startup self-check (`GetTokenInformation`/`TokenUIAccess`, logged at every start) still earns
+its keep for the case where the flag is granted but something else is wrong.
+
+---
+
 ## Testing notes
 
 Two mistakes cost a re-run each and are worth remembering:
