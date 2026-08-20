@@ -22,10 +22,18 @@ stale within weeks.
 one shows a number, a bar, a countdown or any combination, the reset format, colours per
 row, four themes, size, opacity, orientation, alert thresholds.
 
+<img src="docs/styles.png" alt="Style presets, marks, bar styles, fonts and the label toggle" width="480">
+
 <img src="docs/variants.png" alt="The same widget under fourteen different configurations" width="560">
 
 ## Features
 
+- **Five visual styles** — Vibespan (dense, squared, segmented bars, accent rail), Classic,
+  Slim, Card, Terminal — separate from the colour theme, so shape and palette are independent
+- **Font of your choice** — a curated list of what is actually installed, previewed in the
+  menu in its own typeface, plus the full system font dialog
+- **Drop the metric title** entirely, per row, and pick the mark (rail / asterisk / dot / none)
+- **Three bar styles** — continuous, segmented, blocks
 - **Any metric the API exposes** — 5-hour session, 7-day, per-model weekly (Opus / Sonnet /
   Fable), OAuth apps, Cowork, extra credits, spend — discovered automatically
 - **Marks the binding limit** with a dot, so you can see which one will actually bite
@@ -36,6 +44,7 @@ row, four themes, size, opacity, orientation, alert thresholds.
 - **Four themes** including a colour-blind-safe one, plus a custom colour per row
 - **Horizontal or vertical** layout
 - **Threshold alerts** at your chosen percentages, once per window, silent by default
+- **Refresh interval** from 3 to 30 minutes
 - **Gets out of the way of games** — hides while a full-screen app is in front, including
   borderless-fullscreen, and stops re-asserting topmost so it cannot kick a game out of its
   display mode
@@ -158,11 +167,26 @@ Right-click the widget. Everything lives there:
 <img src="docs/shot-menu.png" alt="The right-click menu" width="290">
 
 - **Metrics** — tick which limits appear; reorder them
-- **&lt;each visible metric&gt;** — layout preset, reset format, remaining-vs-used, colour
+- **&lt;each visible metric&gt;** — layout preset, **show label**, reset format, remaining-vs-used,
+  colour
 - **Size** — 75% to 200%, or drag the bottom-right corner (it snaps to the same steps)
-- **Appearance** — theme, opacity, orientation, logo, border
+- **Appearance** — **style**, theme, **font**, **bar style**, **mark**, opacity, orientation,
+  border
 - **Alerts** — thresholds, sound, mute for an hour
-- **Behaviour** — full-screen hiding, click-through, autostart, live feed, bring to centre
+- **Behaviour** — full-screen hiding, click-through, autostart, **refresh interval**, live
+  feed, bring to centre
+
+**Open settings file** opens it in Notepad specifically, not the shell default — a `.json`
+association can be an IDE that takes twenty seconds to start, or nothing at all, and this is
+a file you open to make a two-character edit.
+
+### How often should it refresh?
+
+**Leave it at 5 minutes, and turn on the live feed if you want live numbers.** Polling harder
+is counterproductive: the endpoint answers 429 with no `Retry-After` and can stay unhappy for
+half an hour, so a fast poll *freezes* the gauge rather than freshening it. 180 seconds is the
+floor and the menu will not go below 3 minutes. The feed is pushed by Claude Code itself, so
+it updates instantly, costs nothing, and cannot be rate limited.
 
 Settings live in `%LOCALAPPDATA%\Vibespan\settings.json` and can be edited by hand
 (**Open settings file**). It is versioned; a file from a newer build is backed up rather
@@ -216,8 +240,10 @@ The in-box compiler is **C# 5 only** — no string interpolation, no `?.`, no `n
 cannot compile XAML, so the UI is all code. `/langversion:5` is passed deliberately so a
 newer-syntax mistake fails on your machine rather than someone else's.
 
-- `--demo <file>` renders a JSON fixture instead of calling the endpoint. Useful for
-  screenshots and layout work, and it avoids tripping the rate limit.
+- `--demo <file>` renders a JSON fixture instead of calling the endpoint, and `--config <dir>`
+  puts its settings somewhere else. Demo instances also skip the single-instance mutex —
+  without that, a screenshot run against an installed (High-integrity) widget silently exits
+  and photographs the live window instead, which produced twenty identical "variants" once.
 - `tests\TestModel.cs` covers the parser and the bucket-merging logic (47 checks).
 - `tests\variants.ps1` renders the widget under a set of configurations into one contact
   sheet.

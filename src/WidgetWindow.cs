@@ -138,10 +138,24 @@ namespace Vibespan
 
         public void ApplyTheme()
         {
+            StylePreset st = Styles.For(Config);
+
             _root.Background = Theme.BackgroundBrush(Config);
             _root.BorderBrush = Config.ShowBorder ? Theme.Brush_(Config, Theme.Border) : Brushes.Transparent;
-            _logoHost.Content = Config.ShowLogo ? Gauge.Logo(14, Theme.Brush_(Config, Theme.Logo)) : null;
-            _logoCol.Width = new GridLength(Config.ShowLogo ? Gauge.LogoColumn : 0);
+            _root.CornerRadius = new CornerRadius(st.Radius);
+            _root.Padding = new Thickness(st.PadX, st.PadY, st.PadX, st.PadY);
+
+            // The mark is part of the style, and ShowLogo can switch it off entirely.
+            bool wantMark = Config.ShowLogo && st.Mark != "none";
+            double markW = wantMark ? Gauge.MarkColumnWidth(Config) : 0;
+            _logoHost.Content = wantMark ? Gauge.Mark(Config, st.RowHeight * 2) : null;
+            _logoCol.Width = new GridLength(markW);
+
+            // One font for the whole widget - per-element font pickers would be a settings
+            // window's job, not a menu's. Border is not a Control, so set the inherited
+            // attached property rather than a FontFamily member; it flows to every TextBlock.
+            System.Windows.Documents.TextElement.SetFontFamily(_root, FontChoices.Resolve(Config));
+
             Opacity = Config.ContentOpacity;
             // Display mode is crisper for small text at exactly 1.0, but it assumes the integer
             // pixel grid and looks wrong at fractional scale, where Ideal degrades gracefully.
@@ -461,6 +475,12 @@ namespace Vibespan
                 SetInterval(Math.Min(cap, Math.Max(Config.PollSeconds, _currentIntervalSeconds * 2)));
             }
             Redraw();
+        }
+
+        /// <summary>Re-apply the configured interval after the user changes it in the menu.</summary>
+        public void ApplyPollInterval()
+        {
+            SetInterval(Config.PollSeconds);
         }
 
         void SetInterval(int seconds)

@@ -120,8 +120,8 @@ namespace Vibespan
 
             m.Items.Add(new Separator());
             m.Items.Add(LanguageMenu());
-            m.Items.Add(Item(L.MenuOpenLog, delegate { OpenFile(Cfg.LogPath); }));
-            m.Items.Add(Item(L.MenuOpenSettings, delegate { C.Save(); OpenFile(Cfg.Path_); }));
+            m.Items.Add(Item(L.MenuOpenLog, delegate { OpenInNotepad(Cfg.LogPath); }));
+            m.Items.Add(Item(L.MenuOpenSettings, delegate { C.Save(); OpenInNotepad(Cfg.Path_); }));
             m.Items.Add(new Separator());
             m.Items.Add(Item(L.MenuQuit, delegate { Application.Current.Shutdown(); }));
 
@@ -221,12 +221,20 @@ namespace Vibespan
                 RowCfg captured = r;
                 m.Items.Add(Radio(RowCfg.PresetNames[i], current == i, delegate
                 {
-                    captured.SetSlots(RowCfg.PresetSlots(idx));
+                    captured.ApplyPreset(idx);
                     Changed(true);
                 }));
             }
 
             m.Items.Add(new Separator());
+
+            RowCfg capLabel = r;
+            m.Items.Add(Toggle(L.MenuShowLabel, r.ShowLabel, delegate (bool on)
+            {
+                capLabel.ShowLabel = on;
+                Changed(false);
+            }));
+
 
             var remaining = new MenuItem { Header = L.MenuRemaining };
             string[] fmts = { "countdown", "clock", "off" };
@@ -311,6 +319,29 @@ namespace Vibespan
             catch (Exception e) { Log.Write("colour picker failed: " + e.Message); }
         }
 
+        // FontDialog is in the GAC alongside ColorDialog, so the full font list costs nothing.
+        // Only the family is kept: size comes from the style, and scaling is the Size menu's job.
+        void PickFont()
+        {
+            try
+            {
+                using (var dlg = new System.Windows.Forms.FontDialog())
+                {
+                    dlg.FontMustExist = true;
+                    dlg.ShowEffects = false;
+                    string current = string.IsNullOrEmpty(C.Font) ? Styles.For(C).Font : C.Font;
+                    try { dlg.Font = new System.Drawing.Font(current, 10f); } catch { }
+                    _win.ForceForeground();
+                    if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    {
+                        C.Font = dlg.Font.FontFamily.Name;
+                        Changed(true);
+                    }
+                }
+            }
+            catch (Exception e) { Log.Write("font picker failed: " + e.Message); }
+        }
+
         // ---------- size ----------
         MenuItem SizeMenu()
         {
@@ -353,6 +384,74 @@ namespace Vibespan
             }
             m.Items.Add(theme);
 
+            // Style is geometry; Theme above is colour. Keeping them apart is what lets the
+            // widget stop looking like the project it grew out of without giving up its palette.
+            var style = new MenuItem { Header = L.MenuStyle };
+            foreach (StylePreset sp in Styles.All)
+            {
+                StylePreset cap = sp;
+                style.Items.Add(Radio(sp.Name, C.Style == sp.Id, delegate
+                {
+                    C.Style = cap.Id;
+                    C.BarStyle = ""; C.Mark = ""; C.Font = "";   // let the new style speak
+                    Changed(true);
+                }));
+            }
+            m.Items.Add(style);
+
+            var font = new MenuItem { Header = L.MenuFont };
+            string activeFont = string.IsNullOrEmpty(C.Font) ? Styles.For(C).Font : C.Font;
+            font.Items.Add(Radio(Styles.For(C).Font + "  (" + L.MenuStyle.ToLowerInvariant() + ")",
+                                 string.IsNullOrEmpty(C.Font), delegate
+            {
+                C.Font = "";
+                Changed(true);
+            }));
+            font.Items.Add(new Separator());
+            foreach (string f in FontChoices.Available)
+            {
+                string cap = f;
+                var mi = Radio(f, string.Equals(C.Font, f, StringComparison.OrdinalIgnoreCase), delegate
+                {
+                    C.Font = cap;
+                    Changed(true);
+                });
+                // Preview the font in its own name - the whole point of picking one.
+                mi.FontFamily = new FontFamily(f);
+                font.Items.Add(mi);
+            }
+            font.Items.Add(new Separator());
+            font.Items.Add(Item(L.MenuMoreFonts, PickFont));
+            m.Items.Add(font);
+
+            var bars = new MenuItem { Header = L.MenuBarStyle };
+            string activeBar = string.IsNullOrEmpty(C.BarStyle) ? Styles.For(C).Bar : C.BarStyle;
+            foreach (string bs in Styles.BarStyles)
+            {
+                string cap = bs;
+                bars.Items.Add(Radio(char.ToUpperInvariant(bs[0]) + bs.Substring(1),
+                                     activeBar == bs, delegate
+                {
+                    C.BarStyle = cap;
+                    Changed(true);
+                }));
+            }
+            m.Items.Add(bars);
+
+            var marks = new MenuItem { Header = L.MenuMark };
+            string activeMark = string.IsNullOrEmpty(C.Mark) ? Styles.For(C).Mark : C.Mark;
+            foreach (string mk in Styles.Marks)
+            {
+                string cap = mk;
+                marks.Items.Add(Radio(char.ToUpperInvariant(mk[0]) + mk.Substring(1),
+                                      activeMark == mk, delegate
+                {
+                    C.Mark = cap;
+                    Changed(true);
+                }));
+            }
+            m.Items.Add(marks);
+
             var opacity = new MenuItem { Header = L.MenuOpacity };
             double[] steps = { 1.0, 0.9, 0.8, 0.7, 0.6, 0.5 };
             foreach (double o in steps)
@@ -385,6 +484,8 @@ namespace Vibespan
             m.Items.Add(Item(L.MenuResetAppearance, delegate
             {
                 C.ThemePreset = "claude";
+                C.Style = "vibespan";
+                C.Font = ""; C.BarStyle = ""; C.Mark = "";
                 C.Overrides.Clear();
                 C.ContentOpacity = 1.0;
                 C.BackgroundAlpha = 0.95;
@@ -458,6 +559,29 @@ namespace Vibespan
             }));
 
             m.Items.Add(new Separator());
+
+            // 180s is the floor the endpoint tolerates: it answers 429 with no Retry-After and
+            // can stay unhappy for half an hour, so polling harder FREEZES the gauge rather
+            // than freshening it. Anyone who wants live numbers wants the feed below instead.
+            var refresh = new MenuItem { Header = L.MenuRefreshEvery };
+            int[] mins = { 3, 5, 10, 15, 30 };
+            foreach (int mi in mins)
+            {
+                int secs = mi * 60;
+                refresh.Items.Add(Radio(string.Format(L.MenuMinutes, mi), C.PollSeconds == secs, delegate
+                {
+                    C.PollSeconds = secs;
+                    C.Save();
+                    _win.ApplyPollInterval();
+                    _win.RaiseMenuRebuild();
+                }));
+            }
+            refresh.Items.Add(new Separator());
+            var hint = new MenuItem { Header = L.MenuFeedHint, IsEnabled = false };
+            refresh.Items.Add(hint);
+            m.Items.Add(refresh);
+
+            m.Items.Add(new Separator());
             Feed.FeedState fs = Feed.Detect();
             var feed = Toggle(L.MenuUseLiveFeed, fs == Feed.FeedState.OwnedByUs, delegate (bool on)
             {
@@ -493,17 +617,27 @@ namespace Vibespan
             return m;
         }
 
-        static void OpenFile(string path)
+        /// <summary>
+        /// Always Notepad, never the shell default. A .json association can be anything from
+        /// an IDE that takes 20 seconds to start to nothing at all, and this is a file people
+        /// open to make a two-character edit.
+        /// </summary>
+        static void OpenInNotepad(string path)
         {
             try
             {
-                if (!File.Exists(path)) return;
-                // Launch through explorer so the child does NOT inherit this process's token.
-                // uiAccess under an admin account means High integrity, and Process.Start would
-                // otherwise open an elevated Notepad.
-                Process.Start("explorer.exe", "\"" + path + "\"");
+                if (!File.Exists(path))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    File.WriteAllText(path, "");     // opening nothing is worse than opening empty
+                }
+                Process.Start("notepad.exe", "\"" + path + "\"");
             }
-            catch (Exception e) { Log.Write("open failed: " + e.Message); }
+            catch (Exception e)
+            {
+                Log.Write("open failed: " + e.Message);
+                try { Process.Start("explorer.exe", "\"" + path + "\""); } catch { }
+            }
         }
     }
 

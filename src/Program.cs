@@ -21,17 +21,30 @@ namespace Vibespan
                 return Feed.RunAsStatusLine();
 
             // --demo <file>: render a fixture instead of calling the endpoint.
+            // --config <dir>: keep settings somewhere other than %LOCALAPPDATA%\Vibespan.
             for (int i = 0; i < argv.Length - 1; i++)
+            {
                 if (argv[i] == "--demo") Api.DemoFile = argv[i + 1];
+                else if (argv[i] == "--config") Cfg.UseDir(argv[i + 1]);
+            }
+            bool isDemo = !string.IsNullOrEmpty(Api.DemoFile);
 
             // A named mutex, not "kill anything with my process name". Killing the previous
             // instance leaves its tray icon behind as a ghost until someone hovers over it.
-            bool created;
-            _single = new Mutex(true, "Local\\VibespanSingleInstance", out created);
-            if (!created)
+            //
+            // Demo instances opt out. An installed widget runs at High integrity and cannot
+            // be stopped from a normal shell, so a shared mutex meant every screenshot run
+            // silently exited and photographed the installed window instead - twenty
+            // "different" variants that were all the same live window.
+            if (!isDemo)
             {
-                Log.Write("another instance is already running; exiting");
-                return 0;
+                bool created;
+                _single = new Mutex(true, "Local\\VibespanSingleInstance", out created);
+                if (!created)
+                {
+                    Log.Write("another instance is already running; exiting");
+                    return 0;
+                }
             }
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
@@ -46,7 +59,7 @@ namespace Vibespan
             var win = new WidgetWindow(cfg);
 
             MenuBuilder builder = new MenuBuilder(win);
-            _tray = new Tray(win, delegate { return builder.Build(); });
+            if (!isDemo) _tray = new Tray(win, delegate { return builder.Build(); });
 
             Action rebuild = delegate
             {
@@ -59,7 +72,7 @@ namespace Vibespan
             win.Loaded += delegate
             {
                 rebuild();
-                _tray.Start();
+                if (_tray != null) _tray.Start();
                 _watcher = new TopmostWatcher(win);
                 _watcher.Start();
             };
@@ -75,7 +88,7 @@ namespace Vibespan
                 // A tray icon outlives a crashed process, so tear it down on every exit path.
                 if (_watcher != null) _watcher.Dispose();
                 if (_tray != null) _tray.Dispose();
-                try { _single.ReleaseMutex(); } catch { }
+                try { if (_single != null) _single.ReleaseMutex(); } catch { }
             }
         }
     }

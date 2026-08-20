@@ -42,8 +42,9 @@ namespace Vibespan
             foreach (string s in slots) Slots.Add(s);
         }
 
-        // The menu exposes presets rather than four loose checkboxes: four booleans give 16
-        // combinations, several of which are meaningless (all off is an empty row).
+        // Presets cover the content columns only. The label ("5h", "7d") is deliberately NOT
+        // part of them - wanting to drop the title is independent of wanting a bar, and
+        // folding it in would double the preset count for no gain.
         public static readonly string[] PresetNames =
         {
             "Percent only", "Bar only", "Percent + Bar",
@@ -53,21 +54,41 @@ namespace Vibespan
         {
             switch (i)
             {
-                case 0: return new[] { "label", "percent" };
-                case 1: return new[] { "label", "bar" };
-                case 2: return new[] { "label", "percent", "bar" };
-                case 3: return new[] { "label", "percent", "bar", "reset" };
-                case 4: return new[] { "label", "bar", "reset" };
-                default: return new[] { "label", "percent", "reset" };
+                case 0: return new[] { "percent" };
+                case 1: return new[] { "bar" };
+                case 2: return new[] { "percent", "bar" };
+                case 3: return new[] { "percent", "bar", "reset" };
+                case 4: return new[] { "bar", "reset" };
+                default: return new[] { "percent", "reset" };
             }
         }
-        /// <summary>Index of the preset matching the current slots, or -1 for a custom set.</summary>
+
+        public bool ShowLabel
+        {
+            get { return Has("label"); }
+            set
+            {
+                if (value) { if (!Has("label")) Slots.Insert(0, "label"); }
+                else Slots.Remove("label");
+            }
+        }
+
+        /// <summary>Apply a preset while preserving whether the label is shown.</summary>
+        public void ApplyPreset(int i)
+        {
+            bool label = ShowLabel;
+            SetSlots(PresetSlots(i));
+            ShowLabel = label;
+        }
+
+        /// <summary>Index of the preset matching the current content slots, or -1 if custom.</summary>
         public int PresetIndex()
         {
             for (int i = 0; i < PresetNames.Length; i++)
             {
                 string[] want = PresetSlots(i);
-                if (want.Length != Slots.Count) continue;
+                int mine = Slots.Count - (ShowLabel ? 1 : 0);
+                if (want.Length != mine) continue;
                 bool same = true;
                 for (int k = 0; k < want.Length; k++) if (!Slots.Contains(want[k])) { same = false; break; }
                 if (same) return i;
@@ -93,6 +114,13 @@ namespace Vibespan
         public bool ShowLogo = true;
         public bool ShowBorder = true;
 
+        // ---- appearance ----
+        // Style is geometry and identity, Theme is colour. Separate axes on purpose.
+        public string Style = "vibespan";
+        public string Font = "";        // empty = whatever the style specifies
+        public string BarStyle = "";    // empty = whatever the style specifies
+        public string Mark = "";        // empty = whatever the style specifies
+
         // ---- theme ----
         public string ThemePreset = "claude";
         public Dictionary<string, string> Overrides = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -115,10 +143,17 @@ namespace Vibespan
 
         public const string AppName = "Vibespan";
 
+        // --config points this somewhere else. Without it, a --demo instance run for
+        // screenshots or tests writes over the settings of a real install, and there is no
+        // way to notice until the widget restarts with somebody else's test layout.
+        static string _dirOverride;
+        public static void UseDir(string dir) { _dirOverride = dir; }
+
         public static string Dir
         {
             get
             {
+                if (!string.IsNullOrEmpty(_dirOverride)) return _dirOverride;
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppName);
             }
@@ -146,6 +181,7 @@ namespace Vibespan
             if (r != null) return r;
             r = new RowCfg { Key = key, Visible = (key == "session" || key == "weekly") };
             r.SetSlots(RowCfg.PresetSlots(3));
+            r.ShowLabel = true;              // presets no longer carry the label
             Rows.Add(r);
             return r;
         }
@@ -160,6 +196,10 @@ namespace Vibespan
             if (PollSeconds < 180) PollSeconds = 180;      // the endpoint 429s below this
             if (PollSeconds > 3600) PollSeconds = 3600;
             if (string.IsNullOrEmpty(ThemePreset)) ThemePreset = "claude";
+            if (string.IsNullOrEmpty(Style)) Style = "vibespan";
+            if (Font == null) Font = "";
+            if (BarStyle == null) BarStyle = "";
+            if (Mark == null) Mark = "";
             if (string.IsNullOrEmpty(Lang)) Lang = "en";
             if (Overrides == null) Overrides = new Dictionary<string, string>(StringComparer.Ordinal);
             if (Rows == null) Rows = new List<RowCfg>();
@@ -176,7 +216,7 @@ namespace Vibespan
 
             foreach (RowCfg r in Rows)
             {
-                if (r.Slots == null || r.Slots.Count == 0) r.SetSlots(RowCfg.PresetSlots(3));
+                if (r.Slots == null || r.Slots.Count == 0) { r.SetSlots(RowCfg.PresetSlots(3)); r.ShowLabel = true; }
                 if (r.ResetFormat != "clock" && r.ResetFormat != "off") r.ResetFormat = "countdown";
             }
             if (Rows.Count == 0) { EnsureRow("session"); EnsureRow("weekly"); }
@@ -214,6 +254,11 @@ namespace Vibespan
                 c.HideFullScreen = w["hideFullScreen"].AsBool(true);
                 c.ShowLogo = w["showLogo"].AsBool(true);
                 c.ShowBorder = w["showBorder"].AsBool(true);
+
+                c.Style = w["style"].AsString("vibespan");
+                c.Font = w["font"].AsString("");
+                c.BarStyle = w["barStyle"].AsString("");
+                c.Mark = w["mark"].AsString("");
 
                 JNode t = j["theme"];
                 c.ThemePreset = t["preset"].AsString("claude");
@@ -294,6 +339,10 @@ namespace Vibespan
             w.Set("hideFullScreen", HideFullScreen);
             w.Set("showLogo", ShowLogo);
             w.Set("showBorder", ShowBorder);
+            w.Set("style", Style);
+            w.Set("font", Font);
+            w.Set("barStyle", BarStyle);
+            w.Set("mark", Mark);
             j.Set("window", w);
 
             JNode t = JNode.NewObject();

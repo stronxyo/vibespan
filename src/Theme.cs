@@ -198,4 +198,161 @@ namespace Vibespan
             "#7FB3D5", "#9BA0B5", "#F2F5F7", "#6C7086"
         };
     }
+    /// <summary>
+    /// Visual identity, kept deliberately separate from colour. A "theme" answers what colour
+    /// things are; a "style" answers what shape they are - corner radius, density, how the bar
+    /// is drawn, and which mark sits on the left. Two axes, because wanting a squarer, denser
+    /// widget has nothing to do with wanting a colour-blind-safe palette.
+    /// </summary>
+    public class StylePreset
+    {
+        public string Id, Name;
+        public double Radius;
+        public double PadX, PadY;
+        public double RowHeight;
+        public double BarHeight;
+        public double BarWidth;
+        public string Bar;        // continuous | segmented | blocks
+        public string Mark;       // asterisk | rail | dot | none
+        public string Font;       // default family for this style
+        public bool UpperLabels;
+        public double LabelSize, PercentSize, ResetSize;
+    }
+
+    public static class Styles
+    {
+        static List<StylePreset> _all;
+
+        public static List<StylePreset> All
+        {
+            get
+            {
+                if (_all != null) return _all;
+                _all = new List<StylePreset>();
+
+                // The default. Denser and squarer than the widget this project grew out of,
+                // with a segmented bar and an accent rail instead of the Claude asterisk - the
+                // asterisk is the single biggest reason two of these look like the same app.
+                _all.Add(new StylePreset
+                {
+                    Id = "vibespan", Name = "Vibespan",
+                    Radius = 3, PadX = 9, PadY = 4, RowHeight = 17,
+                    BarHeight = 6, BarWidth = 54, Bar = "segmented", Mark = "rail",
+                    Font = "Consolas", UpperLabels = true,
+                    LabelSize = 8, PercentSize = 10.5, ResetSize = 8.5
+                });
+
+                _all.Add(new StylePreset
+                {
+                    Id = "classic", Name = "Classic",
+                    Radius = 7, PadX = 8, PadY = 3, RowHeight = 18,
+                    BarHeight = 4, BarWidth = 58, Bar = "continuous", Mark = "asterisk",
+                    Font = "Segoe UI", UpperLabels = false,
+                    LabelSize = 8.5, PercentSize = 10, ResetSize = 9
+                });
+
+                _all.Add(new StylePreset
+                {
+                    Id = "slim", Name = "Slim",
+                    Radius = 2, PadX = 7, PadY = 1, RowHeight = 14,
+                    BarHeight = 2, BarWidth = 46, Bar = "continuous", Mark = "dot",
+                    Font = "Segoe UI", UpperLabels = false,
+                    LabelSize = 8, PercentSize = 9, ResetSize = 8
+                });
+
+                _all.Add(new StylePreset
+                {
+                    Id = "card", Name = "Card",
+                    Radius = 12, PadX = 13, PadY = 8, RowHeight = 21,
+                    BarHeight = 5, BarWidth = 62, Bar = "continuous", Mark = "asterisk",
+                    Font = "Segoe UI", UpperLabels = false,
+                    LabelSize = 9, PercentSize = 11.5, ResetSize = 9.5
+                });
+
+                _all.Add(new StylePreset
+                {
+                    Id = "terminal", Name = "Terminal",
+                    Radius = 0, PadX = 8, PadY = 4, RowHeight = 16,
+                    BarHeight = 9, BarWidth = 50, Bar = "blocks", Mark = "none",
+                    Font = "Consolas", UpperLabels = true,
+                    LabelSize = 8.5, PercentSize = 10, ResetSize = 8.5
+                });
+
+                return _all;
+            }
+        }
+
+        public static StylePreset Find(string id)
+        {
+            foreach (StylePreset p in All) if (p.Id == id) return p;
+            return All[0];
+        }
+
+        /// <summary>Active style with any per-user overrides folded in.</summary>
+        public static StylePreset For(Cfg cfg)
+        {
+            StylePreset p = Find(cfg.Style);
+            if (string.IsNullOrEmpty(cfg.BarStyle) && string.IsNullOrEmpty(cfg.Mark)) return p;
+
+            // Copy so the shared preset is never mutated.
+            var o = new StylePreset
+            {
+                Id = p.Id, Name = p.Name, Radius = p.Radius, PadX = p.PadX, PadY = p.PadY,
+                RowHeight = p.RowHeight, BarHeight = p.BarHeight, BarWidth = p.BarWidth,
+                Bar = p.Bar, Mark = p.Mark, Font = p.Font, UpperLabels = p.UpperLabels,
+                LabelSize = p.LabelSize, PercentSize = p.PercentSize, ResetSize = p.ResetSize
+            };
+            if (!string.IsNullOrEmpty(cfg.BarStyle)) o.Bar = cfg.BarStyle;
+            if (!string.IsNullOrEmpty(cfg.Mark)) o.Mark = cfg.Mark;
+            return o;
+        }
+
+        public static readonly string[] BarStyles = { "continuous", "segmented", "blocks" };
+        public static readonly string[] Marks = { "asterisk", "rail", "dot", "none" };
+    }
+
+    public static class FontChoices
+    {
+        // Curated rather than "every installed font": a menu is not a font browser, and most
+        // of what is installed is unusable at 9px. Anything missing is filtered out, and
+        // "More fonts..." opens the real dialog for everything else.
+        static readonly string[] Candidates =
+        {
+            "Segoe UI", "Segoe UI Variable Text", "Consolas", "Cascadia Mono", "Cascadia Code",
+            "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Inter", "Roboto", "Roboto Mono",
+            "Tahoma", "Verdana", "Trebuchet MS", "Lucida Console", "Courier New", "Arial"
+        };
+
+        static List<string> _available;
+        public static List<string> Available
+        {
+            get
+            {
+                if (_available != null) return _available;
+                _available = new List<string>();
+                var installed = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    foreach (FontFamily f in System.Windows.Media.Fonts.SystemFontFamilies)
+                    {
+                        string n = f.Source;
+                        int slash = n.LastIndexOf('#');
+                        if (slash >= 0) n = n.Substring(slash + 1);
+                        installed[n] = true;
+                    }
+                }
+                catch { }
+                foreach (string c in Candidates) if (installed.ContainsKey(c)) _available.Add(c);
+                if (_available.Count == 0) _available.Add("Segoe UI");
+                return _available;
+            }
+        }
+
+        public static FontFamily Resolve(Cfg cfg)
+        {
+            string name = !string.IsNullOrEmpty(cfg.Font) ? cfg.Font : Styles.For(cfg).Font;
+            try { return new FontFamily(name); }
+            catch { return new FontFamily("Segoe UI"); }
+        }
+    }
 }

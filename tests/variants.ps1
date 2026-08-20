@@ -18,11 +18,12 @@ public class V {
 '@
 try { Add-Type -TypeDefinition $sig } catch { }   # already loaded in this session
 
-$cfgDir  = "$env:LOCALAPPDATA\Vibespan"
+# Isolated: never write over a real install's settings.
+$cfgDir  = "$env:TEMP\vibespan-shots"
 $cfgPath = "$cfgDir\settings.json"
 
 function Stop-Widget {
-    Get-Process Vibespan -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process Vibespan -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$env:TEMP*" } | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
 }
 
@@ -85,10 +86,10 @@ foreach ($v in $variants) {
     & $v.apply $cfg
     $cfg | ConvertTo-Json -Depth 8 | Out-File $cfgPath -Encoding utf8
 
-    Start-Process $Exe -ArgumentList @('--demo', "`"$Fixture`"") | Out-Null
+    Start-Process $Exe -ArgumentList @('--demo', "`"$Fixture`"", '--config', "`"$cfgDir`"") | Out-Null
     Start-Sleep -Milliseconds 2200
 
-    $proc = Get-Process Vibespan -ErrorAction SilentlyContinue | Select-Object -First 1
+    $proc = Get-Process Vibespan -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$env:TEMP*" } | Select-Object -First 1
     if (-not $proc) { Write-Host "  !! $($v.name): process not running"; continue }
     $h = $proc.MainWindowHandle
     $r = New-Object V+R

@@ -1,5 +1,9 @@
 // View construction. Pure rendering: no Win32, no config mutation, no I/O.
 //
+// Geometry comes from the active StylePreset, colour from the active Theme, and the two are
+// independent - "I want a denser, squarer widget" has nothing to do with "I want a
+// colour-blind-safe palette".
+//
 // Column widths are computed from the union of slots actually in use, so hiding the
 // percentage really reclaims its space instead of leaving a gap - but every row shares the
 // same column set, so the numbers still line up with each other.
@@ -15,14 +19,14 @@ namespace Vibespan
 {
     public static class Gauge
     {
-        public const double RowHeight = 18;
         public const double LogoColumn = 20;
-        const double LabelW = 24, PercentW = 36, BarW = 58, ResetW = 44, BarH = 4;
+        const double LabelW = 26, PercentW = 38, ResetW = 44;
 
         static Strings L { get { return I18n.T; } }
 
+        // ---------- marks ----------
         /// <summary>The Claude-style asterisk, drawn as vectors so it stays crisp at any scale.</summary>
-        public static Canvas Logo(double size, Brush fill)
+        public static Canvas Asterisk(double size, Brush fill)
         {
             var cv = new Canvas { Width = size, Height = size };
             double c = size / 2;
@@ -41,32 +45,116 @@ namespace Vibespan
             return cv;
         }
 
-        // ---------- bar ----------
-        static FrameworkElement Bar(Cfg cfg, double pct, string severity, string accent, double w, double h)
+        /// <summary>Build the left-hand mark for the active style, or null when there isn't one.</summary>
+        public static FrameworkElement Mark(Cfg cfg, double heightHint)
         {
-            var track = new Border
+            StylePreset st = Styles.For(cfg);
+            Brush accent = Theme.Brush_(cfg, Theme.Logo);
+
+            switch (st.Mark)
             {
-                Width = w, Height = h,
-                CornerRadius = new CornerRadius(1),   // rounded caps eat visible fill at 4px
-                Background = Theme.Brush_(cfg, Theme.Track),
-                VerticalAlignment = VerticalAlignment.Center
-            };
+                case "asterisk":
+                    return Asterisk(14, accent);
+
+                case "rail":
+                    // A vertical accent rail. Cheap, and the single clearest way to stop the
+                    // widget reading as "the one with the Claude asterisk".
+                    return new Border
+                    {
+                        Width = 3,
+                        Height = Math.Max(10, heightHint),
+                        CornerRadius = new CornerRadius(1.5),
+                        Background = accent,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Left
+                    };
+
+                case "dot":
+                    return new Ellipse
+                    {
+                        Width = 7, Height = 7,
+                        Fill = accent,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Left
+                    };
+
+                default:
+                    return null;
+            }
+        }
+
+        public static double MarkColumnWidth(Cfg cfg)
+        {
+            StylePreset st = Styles.For(cfg);
+            if (st.Mark == "none") return 0;
+            if (st.Mark == "asterisk") return LogoColumn;
+            if (st.Mark == "rail") return 9;
+            return 13;   // dot
+        }
+
+        // ---------- bar ----------
+        static FrameworkElement Bar(Cfg cfg, StylePreset st, double pct, string severity, string accent, double w)
+        {
+            double h = st.BarHeight;
+            Brush fillBrush = accent != null ? Theme.B(accent) : Theme.PercentBrush(cfg, pct, severity);
+            Brush trackBrush = Theme.Brush_(cfg, Theme.Track);
+            double radius = st.Bar == "continuous" ? 1 : 0;
 
             var grid = new Grid { Width = w, Height = h };
-            grid.Children.Add(track);
 
+            if (st.Bar == "segmented" || st.Bar == "blocks")
+            {
+                // Quantises to the cell count, which costs precision - acceptable because the
+                // number is usually right next to it, and it reads very differently from a
+                // plain fill, which is the point of offering it.
+                int cells = st.Bar == "segmented" ? 10 : 5;
+                double gap = st.Bar == "segmented" ? 2 : 3;
+                double cellW = (w - gap * (cells - 1)) / cells;
+                double filled = pct / 100.0 * cells;
+
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                for (int i = 0; i < cells; i++)
+                {
+                    double frac = Math.Max(0, Math.Min(1, filled - i));
+                    var cell = new Border
+                    {
+                        Width = cellW, Height = h,
+                        Margin = new Thickness(0, 0, i == cells - 1 ? 0 : gap, 0),
+                        CornerRadius = new CornerRadius(radius),
+                        Background = trackBrush
+                    };
+                    if (frac > 0)
+                    {
+                        // Partial cells fade rather than half-fill: a half-lit block at 5px
+                        // wide just looks like a rendering artefact.
+                        cell.Background = fillBrush;
+                        cell.Opacity = frac < 1 ? 0.35 + 0.65 * frac : 1.0;
+                    }
+                    row.Children.Add(cell);
+                }
+                grid.Children.Add(row);
+                return grid;
+            }
+
+            // continuous
+            grid.Children.Add(new Border
+            {
+                Width = w, Height = h,
+                CornerRadius = new CornerRadius(1),
+                Background = trackBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            });
             if (pct > 0)
             {
                 // Floor the fill so 1% is visible rather than swallowed by antialiasing.
                 double fw = Math.Max(2, w * Math.Min(100, pct) / 100.0);
-                var fill = new Border
+                grid.Children.Add(new Border
                 {
                     Width = fw, Height = h,
                     CornerRadius = new CornerRadius(1),
-                    Background = accent != null ? Theme.B(accent) : Theme.PercentBrush(cfg, pct, severity),
+                    Background = fillBrush,
                     HorizontalAlignment = HorizontalAlignment.Left
-                };
-                grid.Children.Add(fill);
+                });
             }
 
             // Threshold tick. Colour must never be the only signal (WCAG 1.4.1), and a
@@ -74,15 +162,14 @@ namespace Vibespan
             double warn = Theme.WarnAt(cfg);
             if (warn > 0 && warn < 100)
             {
-                var tick = new Rectangle
+                grid.Children.Add(new Rectangle
                 {
                     Width = 1, Height = h,
                     Fill = Theme.Brush_(cfg, Theme.Background),
                     Opacity = 0.85,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     Margin = new Thickness(Math.Round(w * warn / 100.0), 0, 0, 0)
-                };
-                grid.Children.Add(tick);
+                });
             }
             return grid;
         }
@@ -103,7 +190,6 @@ namespace Vibespan
         class Slots
         {
             public bool Label, Percent, Bar, Reset;
-            public bool Any { get { return Label || Percent || Bar || Reset; } }
         }
 
         static Slots UnionOf(Cfg cfg, List<Bucket> shown)
@@ -133,18 +219,19 @@ namespace Vibespan
             return r.ResetFormat == "clock" ? Fmt.Clock(b.ResetsAt) : Fmt.Countdown(b.ResetsAt);
         }
 
-        static string LabelText(Bucket b, RowCfg r)
+        static string LabelText(Cfg cfg, Bucket b, RowCfg r)
         {
-            return string.IsNullOrEmpty(r.CustomLabel) ? b.Label : r.CustomLabel;
+            string t = string.IsNullOrEmpty(r.CustomLabel) ? b.Label : r.CustomLabel;
+            return Styles.For(cfg).UpperLabels ? t.ToUpperInvariant() : t;
         }
 
-        static FrameworkElement HorizontalRow(Cfg cfg, Bucket b, RowCfg r, Slots u)
+        static FrameworkElement HorizontalRow(Cfg cfg, StylePreset st, Bucket b, RowCfg r, Slots u)
         {
-            var row = new Grid { Height = RowHeight };
+            var row = new Grid { Height = st.RowHeight };
             var widths = new List<double>();
             if (u.Label) widths.Add(LabelW);
             if (u.Percent) widths.Add(PercentW);
-            if (u.Bar) widths.Add(BarW + 4);
+            if (u.Bar) widths.Add(st.BarWidth + 6);
             if (u.Reset) widths.Add(ResetW);
             foreach (double w in widths)
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
@@ -154,23 +241,26 @@ namespace Vibespan
 
             if (u.Label)
             {
-                var stack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
                 if (r.Has("label"))
-                    stack.Children.Add(Text(LabelText(b, r), 8.5, Theme.Brush_(cfg, Theme.LabelColor), TextAlignment.Left));
-                if (b.IsActive)
                 {
-                    // Which limit is actually binding right now - the server tells us.
-                    stack.Children.Add(new Ellipse
+                    var stack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                    stack.Children.Add(Text(LabelText(cfg, b, r), st.LabelSize,
+                                            Theme.Brush_(cfg, Theme.LabelColor), TextAlignment.Left));
+                    if (b.IsActive)
                     {
-                        Width = 3, Height = 3, Margin = new Thickness(3, 0, 0, 0),
-                        Fill = Theme.Brush_(cfg, Theme.TextSecondary),
-                        VerticalAlignment = VerticalAlignment.Center
-                    });
+                        // Which limit is actually binding right now - the server tells us.
+                        stack.Children.Add(new Ellipse
+                        {
+                            Width = 3, Height = 3, Margin = new Thickness(3, 0, 0, 0),
+                            Fill = Theme.Brush_(cfg, Theme.TextSecondary),
+                            VerticalAlignment = VerticalAlignment.Center
+                        });
+                    }
+                    Grid.SetColumn(stack, col);
+                    row.Children.Add(stack);
                 }
-                Grid.SetColumn(stack, col);
-                row.Children.Add(stack);
+                col++;
             }
-            if (u.Label) col++;
 
             if (u.Percent)
             {
@@ -180,7 +270,7 @@ namespace Vibespan
                     stack.Children.Add(new TextBlock
                     {
                         Text = PercentText(b, r),
-                        FontSize = 10,
+                        FontSize = st.PercentSize,
                         FontWeight = FontWeights.SemiBold,
                         Foreground = r.Accent != null ? Theme.B(r.Accent) : Theme.PercentBrush(cfg, b.Percent, b.Severity),
                         VerticalAlignment = VerticalAlignment.Center
@@ -189,7 +279,7 @@ namespace Vibespan
                     if (critical && !r.Invert)
                         stack.Children.Add(new TextBlock
                         {
-                            Text = "!", FontSize = 10, FontWeight = FontWeights.Bold,
+                            Text = "!", FontSize = st.PercentSize, FontWeight = FontWeights.Bold,
                             Margin = new Thickness(2, 0, 0, 0),
                             Foreground = Theme.PercentBrush(cfg, b.Percent, b.Severity),
                             VerticalAlignment = VerticalAlignment.Center
@@ -204,8 +294,10 @@ namespace Vibespan
             {
                 if (r.Has("bar"))
                 {
-                    FrameworkElement bar = Bar(cfg, r.Invert ? 100 - b.Percent : b.Percent, b.Severity, r.Accent, BarW, BarH);
+                    FrameworkElement bar = Bar(cfg, st, r.Invert ? 100 - b.Percent : b.Percent,
+                                               b.Severity, r.Accent, st.BarWidth);
                     bar.HorizontalAlignment = HorizontalAlignment.Left;
+                    bar.VerticalAlignment = VerticalAlignment.Center;
                     Grid.SetColumn(bar, col);
                     row.Children.Add(bar);
                 }
@@ -219,7 +311,7 @@ namespace Vibespan
                     string t = ResetText(b, r);
                     if (t.Length > 0)
                     {
-                        var tb = Text(t, 9, Theme.Brush_(cfg, Theme.TextSecondary), TextAlignment.Right);
+                        var tb = Text(t, st.ResetSize, Theme.Brush_(cfg, Theme.TextSecondary), TextAlignment.Right);
                         Grid.SetColumn(tb, col);
                         row.Children.Add(tb);
                     }
@@ -230,15 +322,20 @@ namespace Vibespan
             return row;
         }
 
-        static FrameworkElement VerticalRow(Cfg cfg, Bucket b, RowCfg r)
+        static FrameworkElement VerticalRow(Cfg cfg, StylePreset st, Bucket b, RowCfg r)
         {
-            var stack = new StackPanel { Orientation = Orientation.Vertical, Width = 54, Margin = new Thickness(0, 0, 0, 6) };
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Width = Math.Max(54, st.BarWidth + 6),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
             bool critical = b.Percent >= Theme.CriticalAt(cfg);
 
             if (r.Has("label"))
             {
                 var head = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-                head.Children.Add(Text(LabelText(b, r), 8.5, Theme.Brush_(cfg, Theme.LabelColor), TextAlignment.Center));
+                head.Children.Add(Text(LabelText(cfg, b, r), st.LabelSize, Theme.Brush_(cfg, Theme.LabelColor), TextAlignment.Center));
                 if (b.IsActive)
                     head.Children.Add(new Ellipse
                     {
@@ -253,14 +350,16 @@ namespace Vibespan
                 stack.Children.Add(new TextBlock
                 {
                     Text = PercentText(b, r) + (critical && !r.Invert ? " !" : ""),
-                    FontSize = 11, FontWeight = FontWeights.SemiBold,
+                    FontSize = st.PercentSize + 1,
+                    FontWeight = FontWeights.SemiBold,
                     TextAlignment = TextAlignment.Center,
                     Foreground = r.Accent != null ? Theme.B(r.Accent) : Theme.PercentBrush(cfg, b.Percent, b.Severity)
                 });
             }
             if (r.Has("bar"))
             {
-                FrameworkElement bar = Bar(cfg, r.Invert ? 100 - b.Percent : b.Percent, b.Severity, r.Accent, 48, BarH);
+                FrameworkElement bar = Bar(cfg, st, r.Invert ? 100 - b.Percent : b.Percent,
+                                           b.Severity, r.Accent, st.BarWidth);
                 bar.HorizontalAlignment = HorizontalAlignment.Center;
                 bar.Margin = new Thickness(0, 2, 0, 2);
                 stack.Children.Add(bar);
@@ -269,7 +368,7 @@ namespace Vibespan
             {
                 string t = ResetText(b, r);
                 if (t.Length > 0)
-                    stack.Children.Add(Text(t, 9, Theme.Brush_(cfg, Theme.TextSecondary), TextAlignment.Center));
+                    stack.Children.Add(Text(t, st.ResetSize, Theme.Brush_(cfg, Theme.TextSecondary), TextAlignment.Center));
             }
             return stack;
         }
@@ -283,11 +382,12 @@ namespace Vibespan
 
         public static Rendered BuildMessage(Cfg cfg, string message)
         {
-            var grid = new Grid { Height = 36, MinWidth = 140 };
+            StylePreset st = Styles.For(cfg);
+            var grid = new Grid { Height = st.RowHeight * 2, MinWidth = 140 };
             grid.Children.Add(new TextBlock
             {
                 Text = message,
-                FontSize = 10,
+                FontSize = st.ResetSize + 1,
                 Foreground = Theme.Brush_(cfg, Theme.TextSecondary),
                 VerticalAlignment = VerticalAlignment.Center
             });
@@ -296,6 +396,8 @@ namespace Vibespan
 
         public static Rendered Build(Cfg cfg, Snapshot snap, string errorCode, DateTime lastOk)
         {
+            StylePreset st = Styles.For(cfg);
+
             var shown = new List<Bucket>();
             foreach (Bucket b in snap.Buckets)
             {
@@ -306,16 +408,19 @@ namespace Vibespan
 
             var tips = new List<string>();
             bool vertical = cfg.Orientation == "vertical";
-            Panel host = vertical
-                ? (Panel)new StackPanel { Orientation = Orientation.Vertical }
-                : new StackPanel { Orientation = Orientation.Vertical, MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
+            var host = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                MinHeight = vertical ? 0 : st.RowHeight * 2,
+                VerticalAlignment = VerticalAlignment.Center
+            };
 
             Slots union = UnionOf(cfg, shown);
 
             foreach (Bucket b in shown)
             {
                 RowCfg r = cfg.Row(b.Key);
-                host.Children.Add(vertical ? VerticalRow(cfg, b, r) : HorizontalRow(cfg, b, r, union));
+                host.Children.Add(vertical ? VerticalRow(cfg, st, b, r) : HorizontalRow(cfg, st, b, r, union));
 
                 string pct = PercentText(b, r);
                 string reset = Fmt.Countdown(b.ResetsAt);
@@ -330,7 +435,7 @@ namespace Vibespan
             if (errorCode != null)
                 tips.Add(string.Format(L.FrozenFor, Fmt.Age(DateTime.Now - lastOk), Fmt.ErrorText(errorCode)));
 
-            return new Rendered { Content = (FrameworkElement)host, Tooltip = string.Join(Environment.NewLine, tips.ToArray()) };
+            return new Rendered { Content = host, Tooltip = string.Join(Environment.NewLine, tips.ToArray()) };
         }
     }
 }
