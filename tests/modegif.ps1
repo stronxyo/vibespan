@@ -151,10 +151,13 @@ function DrawFrame($idx, [double]$t) {
 }
 
 $i = 0
-foreach ($n in 1..12) { DrawFrame $i 0.0; $i++ }                       # hold card
-foreach ($n in 1..14) { DrawFrame $i (Ease ($n/14)); $i++ }            # collapse
-foreach ($n in 1..12) { DrawFrame $i 1.0; $i++ }                       # hold line
-foreach ($n in 1..12) { DrawFrame $i (Ease (1 - $n/12)); $i++ }        # and back
+# Long dwell on each state, snap between them. Held frames cost almost nothing in a GIF -
+# they compress to near-empty deltas - so the dwell is cheap and the transition is the only
+# part that spends bytes.
+foreach ($n in 1..28) { DrawFrame $i 0.0; $i++ }                       # hold card  (1.4s)
+foreach ($n in 1..4)  { DrawFrame $i (Ease ($n/5)); $i++ }             # snap down  (0.2s)
+foreach ($n in 1..28) { DrawFrame $i 1.0; $i++ }                       # hold line  (1.4s)
+foreach ($n in 1..4)  { DrawFrame $i (Ease (1 - $n/5)); $i++ }         # snap back  (0.2s)
 $card.Dispose(); $line.Dispose()
 Write-Host "frames: $i"
 

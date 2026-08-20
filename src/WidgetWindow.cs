@@ -201,7 +201,17 @@ namespace Vibespan
         {
             _hwnd = new WindowInteropHelper(this).Handle;
 
+            // WS_EX_TOOLWINDOW alone is not enough. ShowInTaskbar=true - which is what avoids
+            // the hidden owner window that sinks Z-order - also sets WS_EX_APPWINDOW, and
+            // APPWINDOW *forces* a taskbar button even on a tool window. Both were set, so the
+            // widget got a taskbar button it has no use for. Strip it.
             Native.AddExStyle(_hwnd, Native.WS_EX_TOOLWINDOW);
+            Native.RemoveExStyle(_hwnd, Native.WS_EX_APPWINDOW);
+            // The shell only re-reads these flags on a visibility change, so the button does
+            // not disappear until the window is hidden and shown again.
+            Native.ShowWindow(_hwnd, Native.SW_HIDE);
+            Native.ShowWindow(_hwnd, Native.SW_SHOWNOACTIVATE);
+
             ApplyClickThrough();
 
             HwndSource src = HwndSource.FromHwnd(_hwnd);

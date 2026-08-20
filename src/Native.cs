@@ -41,6 +41,7 @@ namespace Vibespan
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern int GetClassName(IntPtr h, StringBuilder buf, int count);
         [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
 
         [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
         [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(POINT p, uint flags);
@@ -87,11 +88,14 @@ namespace Vibespan
 
         public const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
         public const int WS_EX_TOOLWINDOW = 0x00000080;
+        public const int WS_EX_APPWINDOW = 0x00040000;
         public const int WS_EX_TRANSPARENT = 0x00000020;
         public const int WS_EX_LAYERED = 0x00080000;
         public const int WS_EX_NOACTIVATE = 0x08000000;
 
         public const uint GW_OWNER = 4;
+
+        public const int SW_HIDE = 0, SW_SHOWNOACTIVATE = 4;
 
         public const int WM_MOUSEACTIVATE = 0x0021;
         public const int WM_LBUTTONDOWN = 0x0201;
