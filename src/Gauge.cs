@@ -46,7 +46,7 @@ namespace Vibespan
         }
 
         /// <summary>Build the left-hand mark for the active style, or null when there isn't one.</summary>
-        public static FrameworkElement Mark(Cfg cfg, double heightHint)
+        public static FrameworkElement Mark(Cfg cfg)
         {
             StylePreset st = Styles.For(cfg);
             Brush accent = Theme.Brush_(cfg, Theme.Logo);
@@ -59,13 +59,17 @@ namespace Vibespan
                 case "rail":
                     // A vertical accent rail. Cheap, and the single clearest way to stop the
                     // widget reading as "the one with the Claude asterisk".
+                    //
+                    // Stretch, never a fixed height: the rail must follow however many rows
+                    // are visible. Giving it a height of its own made it prop the widget open
+                    // at two rows even when only one metric was shown.
                     return new Border
                     {
                         Width = 3,
-                        Height = Math.Max(10, heightHint),
+                        MinHeight = 10,
                         CornerRadius = new CornerRadius(1.5),
                         Background = accent,
-                        VerticalAlignment = VerticalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Stretch,
                         HorizontalAlignment = HorizontalAlignment.Left
                     };
 
@@ -408,10 +412,12 @@ namespace Vibespan
 
             var tips = new List<string>();
             bool vertical = cfg.Orientation == "vertical";
+            // No MinHeight. Each row carries its own explicit height, so the panel sizes to
+            // exactly the number of rows shown - a two-row floor here is why selecting a
+            // single metric still produced a two-metric-tall widget.
             var host = new StackPanel
             {
                 Orientation = Orientation.Vertical,
-                MinHeight = vertical ? 0 : st.RowHeight * 2,
                 VerticalAlignment = VerticalAlignment.Center
             };
 

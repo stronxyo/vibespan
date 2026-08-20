@@ -87,8 +87,10 @@ if ($KeepSettings) { Note 'kept %LOCALAPPDATA%\Vibespan (settings and log)' }
 if ($isAdmin) {
     foreach ($store in 'Root', 'TrustedPublisher', 'My') {
         try {
-            $found = Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction Stop |
-                     Where-Object { $_.Subject -eq $subject }
+            # @() is explicit on purpose: assigning a pipeline already materialises it, but
+            # this reads identically to a streaming Remove-Item, which DOES skip entries.
+            $found = @(Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction Stop |
+                       Where-Object { $_.Subject -eq $subject })
             foreach ($c in $found) {
                 Remove-Item -Path "Cert:\LocalMachine\$store\$($c.Thumbprint)" -DeleteKey -Force -ErrorAction Stop
                 $removed += "certificate from LocalMachine\$store"

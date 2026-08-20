@@ -130,6 +130,27 @@ try {
     # ---------- certificate ----------
     $n++; Step "$n/$total" 'Local signing certificate...'
     $subject = 'CN=Vibespan Local Signing'
+
+    # Sweep out certificates from earlier installs FIRST. The usual recipe reuses an existing
+    # certificate, which this installer cannot do because it destroys the private key after
+    # signing - so without this, every reinstall silently adds another trusted root. Two
+    # installs left two. The whole point of the key destruction is to keep the machine's trust
+    # surface small, and quietly accumulating roots would undo it.
+    $swept = 0
+    foreach ($store in 'Root', 'TrustedPublisher', 'My') {
+        try {
+            # @() first, deliberately. Removing certificates while still enumerating the store
+            # mutates the collection mid-pipeline and silently skips entries - it deleted only
+            # one of two and reported success for both.
+            $stale = @(Get-ChildItem "Cert:\LocalMachine\$store" -ErrorAction Stop |
+                       Where-Object { $_.Subject -eq $subject })
+            foreach ($c in $stale) {
+                Remove-Item -Path "Cert:\LocalMachine\$store\$($c.Thumbprint)" -DeleteKey -Force -ErrorAction Stop
+                $swept++
+            }
+        } catch { }
+    }
+    if ($swept -gt 0) { Write-Host "     removed $swept certificate(s) from a previous install" -ForegroundColor DarkGray }
     $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $subject `
                 -KeyUsage DigitalSignature -CertStoreLocation 'Cert:\LocalMachine\My' `
                 -NotAfter (Get-Date).AddYears(10)

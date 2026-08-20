@@ -148,7 +148,10 @@ namespace Vibespan
             // The mark is part of the style, and ShowLogo can switch it off entirely.
             bool wantMark = Config.ShowLogo && st.Mark != "none";
             double markW = wantMark ? Gauge.MarkColumnWidth(Config) : 0;
-            _logoHost.Content = wantMark ? Gauge.Mark(Config, st.RowHeight * 2) : null;
+            _logoHost.Content = wantMark ? Gauge.Mark(Config) : null;
+            // Stretch so a rail can fill whatever the rows actually come to; the asterisk and
+            // dot centre themselves inside it.
+            _logoHost.VerticalAlignment = VerticalAlignment.Stretch;
             _logoCol.Width = new GridLength(markW);
 
             // One font for the whole widget - per-element font pickers would be a settings
