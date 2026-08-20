@@ -1,0 +1,857 @@
+<title>Vibespan Backlog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  /* Light is the base set; dark redefines the same tokens twice so both the
+     OS preference and an explicit toggle win in either direction. */
+  :root {
+    --ground:      #F2F3F5;
+    --surface:     #FBFBFC;
+    --surface-2:   #E9EBEE;
+    --ink:         #16191E;
+    --ink-mid:     #4A515C;
+    --ink-dim:     #767E8A;
+    --rule:        #D6DAE0;
+    --rule-soft:   #E4E7EC;
+    --accent:      #9A5F16;
+    --accent-soft: #F0E2CD;
+    --ok:          #216B5F;
+    --ok-soft:     #D5E8E3;
+    --warn:        #8A6A12;
+    --warn-soft:   #F2E8C9;
+    --no:          #8E3B34;
+    --no-soft:     #F1DCDA;
+
+    --measure: 68ch;
+    --step--1: 0.795rem;
+    --step-0:  1rem;
+    --step-1:  1.2rem;
+    --step-2:  1.5rem;
+    --step-3:  2rem;
+    --step-4:  2.85rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101317;
+      --surface:     #171B21;
+      --surface-2:   #1E232A;
+      --ink:         #E7EBF0;
+      --ink-mid:     #A8B1BD;
+      --ink-dim:     #78828F;
+      --rule:        #2A313A;
+      --rule-soft:   #222831;
+      --accent:      #E0A253;
+      --accent-soft: #3A2E1B;
+      --ok:          #6FC4B2;
+      --ok-soft:     #1B322E;
+      --warn:        #D7B559;
+      --warn-soft:   #332C15;
+      --no:          #D98A80;
+      --no-soft:     #35211F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #101317;
+    --surface:     #171B21;
+    --surface-2:   #1E232A;
+    --ink:         #E7EBF0;
+    --ink-mid:     #A8B1BD;
+    --ink-dim:     #78828F;
+    --rule:        #2A313A;
+    --rule-soft:   #222831;
+    --accent:      #E0A253;
+    --accent-soft: #3A2E1B;
+    --ok:          #6FC4B2;
+    --ok-soft:     #1B322E;
+    --warn:        #D7B559;
+    --warn-soft:   #332C15;
+    --no:          #D98A80;
+    --no-soft:     #35211F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: var(--step-0);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 78rem;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 4rem) clamp(1.1rem, 4vw, 3rem) 6rem;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 1.5rem; margin-bottom: 2.5rem; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.9rem;
+  }
+
+  h1 {
+    font-family: "Archivo", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: var(--step-4);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    margin: 0 0 0.7rem;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--ink-mid);
+    max-width: var(--measure);
+    margin: 0 0 1.4rem;
+    text-wrap: pretty;
+  }
+
+  .provenance {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    color: var(--ink-dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.4rem;
+  }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 3.5rem; scroll-margin-top: 1.5rem; }
+
+  h2 {
+    font-family: "Archivo", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: var(--step-2);
+    letter-spacing: -0.015em;
+    margin: 0 0 0.4rem;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: "Archivo", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    letter-spacing: -0.01em;
+    margin: 2rem 0 0.9rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .section-note {
+    color: var(--ink-mid);
+    max-width: var(--measure);
+    margin: 0 0 1.6rem;
+  }
+
+  p { max-width: var(--measure); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+  }
+  code {
+    background: var(--surface-2);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  /* ---------- verified panel ---------- */
+  .facts {
+    display: grid;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .fact {
+    background: var(--surface);
+    padding: 0.95rem 1.1rem;
+    display: grid;
+    grid-template-columns: 6.5rem 1fr;
+    gap: 0.3rem 1rem;
+    align-items: start;
+  }
+  @media (max-width: 34rem) { .fact { grid-template-columns: 1fr; } }
+  .fact-verdict {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding-top: 0.2rem;
+  }
+  .v-ok   { color: var(--ok); }
+  .v-warn { color: var(--warn); }
+  .v-no   { color: var(--no); }
+  .fact-body { font-size: 0.95rem; }
+  .fact-body strong { font-weight: 600; }
+  .fact-body .mono { color: var(--ink-mid); }
+
+  /* ---------- idea rows ---------- */
+  .ideas { display: grid; gap: 1px; background: var(--rule-soft); border-block: 1px solid var(--rule-soft); }
+  .idea {
+    background: var(--surface);
+    padding: 1rem 1.15rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.35rem 1.5rem;
+    align-items: baseline;
+  }
+  .idea:hover { background: var(--surface-2); }
+  .idea-title {
+    font-family: "Archivo", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 1.02rem;
+    letter-spacing: -0.005em;
+    margin: 0;
+  }
+  .idea-body { grid-column: 1 / -1; color: var(--ink-mid); margin: 0; font-size: 0.95rem; max-width: var(--measure); }
+  .idea-body .mono { color: var(--ink-dim); }
+
+  .chips { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; }
+  .chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.45rem;
+    border-radius: 3px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .c-s { background: var(--ok-soft);     color: var(--ok);     border-color: var(--ok); }
+  .c-m { background: var(--warn-soft);   color: var(--warn);   border-color: var(--warn); }
+  .c-l { background: var(--no-soft);     color: var(--no);     border-color: var(--no); }
+  .c-star { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .c-new { background: transparent; color: var(--ink-dim); border-color: var(--rule); }
+
+  /* ---------- headline picks ---------- */
+  .picks { display: grid; gap: 1.1rem; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); margin-top: 1.5rem; }
+  .pick {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: 1.15rem 1.2rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .pick h3 { margin: 0; border: 0; padding: 0; font-size: 1.08rem; }
+  .pick p { margin: 0; font-size: 0.94rem; color: var(--ink-mid); max-width: none; }
+  .pick .why {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* ---------- build order ---------- */
+  ol.order { list-style: none; counter-reset: step; padding: 0; margin: 1.2rem 0 0; display: grid; gap: 0.75rem; }
+  ol.order li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 1rem;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0.85rem 1rem;
+  }
+  ol.order li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  ol.order p { margin: 0.2rem 0 0; color: var(--ink-mid); font-size: 0.94rem; max-width: none; }
+  ol.order strong { font-family: "Archivo", system-ui, sans-serif; font-weight: 600; }
+
+  /* ---------- don't build ---------- */
+  .avoid { display: grid; gap: 0.6rem; margin-top: 1.2rem; }
+  .avoid div {
+    border-left: 3px solid var(--no);
+    background: var(--surface);
+    padding: 0.7rem 1rem;
+    font-size: 0.95rem;
+  }
+  .avoid strong { font-family: "Archivo", system-ui, sans-serif; font-weight: 600; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1rem;
+    margin: 1.4rem 0 0;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    color: var(--ink-dim);
+    align-items: center;
+  }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Vibespan · research backlog</p>
+    <h1>Fifty-one things this widget could become</h1>
+    <p class="standfirst">Two deep research passes — every integration surface Claude Code actually exposes, and the design canon for ambient displays — reconciled against what I could verify on this machine.</p>
+    <div class="provenance">
+      <span>20 Aug 2026</span>
+      <span>Claude Code 2.1.237</span>
+      <span>Windows 11 25H2</span>
+      <span>claims checked locally, not relayed</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>What I verified before writing any of this down</h2>
+    <p class="section-note">Research reports are only as good as their weakest unchecked claim. These are the load-bearing ones, tested on your machine — including two the researchers got wrong.</p>
+
+    <div class="facts">
+      <div class="fact">
+        <span class="fact-verdict v-ok">Confirmed</span>
+        <span class="fact-body"><strong>A live session registry exists</strong> at <span class="mono">~/.claude/sessions/&lt;pid&gt;.json</span>. Two files right now, carrying <span class="mono">status</span>, <span class="mono">name</span>, <span class="mono">cwd</span>, <span class="mono">version</span> and a heartbeat. The researcher only ever observed <span class="mono">busy</span> and flagged it uncertain — I see both <span class="mono">busy</span> and <span class="mono">idle</span>, so it is safe to colour-code.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-ok">Confirmed</span>
+        <span class="fact-body"><strong>Your plan tier is readable offline.</strong> <span class="mono">organizationRateLimitTier = "default_claude_max_5x"</span>, <span class="mono">hasExtraUsageEnabled = true</span>. Note it is <em>not</em> in <span class="mono">seatTier</span> or <span class="mono">userRateLimitTier</span> — both null here, which is where the report said to look.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-ok">Confirmed</span>
+        <span class="fact-body"><strong>103 days of usage history sits on disk</strong> in <span class="mono">stats-cache.json</span> — 79 sessions, 29,304 messages, 7 models, per-day per-model token counts, an hour-of-day histogram. Nothing visualises it.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-warn">Caveat</span>
+        <span class="fact-body">That history file is <strong>eight days stale</strong> (<span class="mono">lastComputedDate 2026-08-12</span>) and its <span class="mono">hourCounts</span> has 16 keys, not 24 — it is sparse, and recomputed lazily. Anything built on it must show an "as of" date.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-ok">Confirmed</span>
+        <span class="fact-body"><strong>A local HTTP endpoint needs no privileges.</strong> <span class="mono">HttpListener</span> binds <span class="mono">http://localhost:9847/</span> from a non-elevated process with no <span class="mono">netsh urlacl</span>. This is what makes half the list cheap.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-ok">Confirmed</span>
+        <span class="fact-body"><strong>Claude Code now auto-resumes when a usage limit resets</strong> (2.1.234, in your local changelog). Your reset countdown stops being trivia and starts predicting when work restarts by itself.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-no">Refuted</span>
+        <span class="fact-body"><strong>Painting the taskbar button is not available to us.</strong> The report suggests <span class="mono">ITaskbarList3::SetOverlayIcon</span> — but Vibespan sets <span class="mono">WS_EX_TOOLWINDOW</span> and therefore has no taskbar button at all. That style is exactly what removed the owner-window Z-order bug during the spikes, so it is not going away.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-no">Not on Windows</span>
+        <span class="fact-body"><strong>Cross-session messaging is macOS/Linux only.</strong> No <span class="mono">SendMessage</span>, no <span class="mono">notify_when_idle</span>, no messaging socket. Your session files advertise <span class="mono">peerFeatures: ["notify_idle"]</span>, which is a capability claim, not a bound socket. Ignore that whole surface.</span>
+      </div>
+      <div class="fact">
+        <span class="fact-verdict v-ok">Bonus</span>
+        <span class="fact-body"><strong>Our own JSON parser already earns its keep.</strong> <span class="mono">~/.claude.json</span> contains two keys differing only in case, so PowerShell's <span class="mono">ConvertFrom-Json</span> throws on it outright. Vibespan's parser reads all 83 keys and 16 projects — the <span class="mono">StringComparer.Ordinal</span> choice made for the usage response pays off somewhere it was never designed for.</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="chip c-s">S</span><span>hours</span>
+      <span class="chip c-m">M</span><span>a day or two</span>
+      <span class="chip c-l">L</span><span>a week+</span>
+      <span class="chip c-star">no prior art</span><span>I found nobody doing this</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>The five that change what this is</h2>
+    <p class="section-note">Everything else on the list makes Vibespan better. These make it a different category of thing.</p>
+
+    <div class="picks">
+      <div class="pick">
+        <span class="why">ambient agent monitor</span>
+        <h3>Multi-session tiles</h3>
+        <p>A <code>FileSystemWatcher</code> on the session registry turns the widget into a live view of every Claude running on the machine — name, project, busy/idle, and how long each has been grinding. It stops being a usage gauge and becomes the thing you glance at to see what your agents are doing.</p>
+      </div>
+      <div class="pick">
+        <span class="why">drops the credential handling</span>
+        <h3>Statusline as transport</h3>
+        <p>The status line already receives rate limits, context window, cost, model and effort every turn. Take delivery of that payload and Vibespan needs no OAuth token, no refresh rotation, no writing to the credentials file — the riskiest code in the project deletes itself for anyone who opts in.</p>
+      </div>
+      <div class="pick">
+        <span class="why">the exact instant, not a percentage</span>
+        <h3>Hook listener on 127.0.0.1</h3>
+        <p>Hooks can be <code>type: "http"</code>. Vibespan hosts a listener and Claude Code POSTs events to it — no subprocess per hook. <code>StopFailure</code> with <code>error_type: "rate_limit"</code> is the precise moment you hit the wall, and a permission prompt waiting in a background terminal becomes a desktop notification.</p>
+      </div>
+      <div class="pick">
+        <span class="why">one number instead of two</span>
+        <h3>Burn rate, not percent used</h3>
+        <p>Show <code>1.4×</code> — you are spending quota 1.4 times faster than the rate that exactly exhausts it at reset. Self-normalising across both windows, needs no reference to time remaining, and instantly actionable. An error budget <em>is</em> a quota that refills on a schedule; the mapping is exact.</p>
+      </div>
+      <div class="pick">
+        <span class="why">everything else becomes free</span>
+        <h3>A local <code>/metrics</code> endpoint</h3>
+        <p>Twenty lines exposing the gauges in Prometheus text format hands you Grafana, Home Assistant, Polybar, Waybar, Rainmeter and every hobbyist ESP32 at once. Every physical-device idea below turns into somebody else's weekend project instead of your maintenance burden.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where the data could come from</h2>
+    <p class="section-note">Vibespan currently has one source and it is the undocumented one. Every item here reduces that dependency.</p>
+
+    <h3>Feeds and transports</h3>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">Statusline-as-transport</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Install a status line that POSTs its whole stdin payload to Vibespan and prints a normal line. Live <span class="mono">rate_limits</span>, <span class="mono">context_window</span>, <span class="mono">cost</span>, <span class="mono">model</span>, <span class="mono">effort</span>, per session, with zero credential handling. Chain to any existing user status line rather than clobbering it.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">HTTP hook listener</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">One listener, many events. Drives a per-session state machine: idle → prompt submitted → running tool → stopped. Sub-10ms, no process spawns. Worth proving the response contract with a throwaway listener before building UI on it.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Prometheus scrape of Claude's own telemetry</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Setting the exporter to <span class="mono">prometheus</span> opens a scrape endpoint on port 9464. Vibespan GETs it and parses text — no OTLP decoding at all. Real cost in USD, tokens split by cache-read and cache-creation, attributed per model, per skill, per MCP server.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Full OTLP receiver</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">The heavier version of the above, speaking <span class="mono">http/json</span> so no protobuf dependency is needed. Gets you per-skill and per-MCP-server cost attribution live. <strong>Rate limits are not exported over telemetry</strong> — the gauges must keep their existing source.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Ship as a Claude Code plugin</p>
+        <div class="chips"><span class="chip c-m">M</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">A plugin bundles hooks, a status line, a subagent status line and a background monitor in one installable unit. It would replace the self-signed-certificate installer for the integration half entirely.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Reverse channel — the widget talks back</p>
+        <div class="chips"><span class="chip c-m">M</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">A plugin monitor is a long-lived process whose stdout becomes a notification <em>to Claude</em>. Point one at a file Vibespan writes and the widget can say "your 5-hour window resets in four minutes — wrap up." The usage meter advising the agent is a genuinely new interaction.</p>
+      </div>
+    </div>
+
+    <h3>Things already on disk that nothing reads</h3>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">Multi-session tiles</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Watch the session registry directory. Every running Claude as a tile: name, project, busy or idle, elapsed. The biggest unbuilt idea in either report, and it needs no network and no permissions.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Stall detector</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Time since the status last flipped, while busy — "this session has been grinding for 14 minutes." Time since the heartbeat, if large, means the process died without cleanup; grey the tile out rather than lying about it.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Plan and credits badge, offline</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Label the gauges "Max 5×" and show whether extra-usage credits are enabled, read straight from the config file. Today that has to be inferred.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">30-day history panel</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Expand the hover into a sparkline of daily tokens stacked by model, from the local stats cache. One JSON parse, no network, 103 days already sitting there.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Cache-efficiency ring</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Cache reads as a share of all input tokens. Claude's own usage screen flags cache misses once they pass 10% of usage — so this is a directly actionable number, and nothing displays it live.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Cache-tier defection warning</p>
+        <div class="chips"><span class="chip c-m">M</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Transcripts distinguish 1-hour from 5-minute cache creation. The tier flips when you start drawing on usage credits — so Vibespan could warn "you have fallen off the 1-hour cache" <em>before</em> the user notices their usage accelerating.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Thinking-token meter</p>
+        <div class="chips"><span class="chip c-m">M</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Per-response thinking tokens are recorded in transcripts and surfaced nowhere in the product. A "how hard did it think this turn" bar ties directly to your effort setting.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Which project ate your week</p>
+        <div class="chips"><span class="chip c-m">M</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Group local prompt history by project and cross-reference against the weekly percentage. Plenty of tools do per-project <em>cost</em>; none answers "this repo consumed 40% of my quota." Note this file holds raw prompt text — read it only with that stated loudly.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">MCP re-auth badge</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">A cache file lists servers needing re-login. "2 MCP servers need attention" is a one-line read and saves a confusing failure later.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Insights report launcher</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">The insights command writes an HTML report to disk. Watch for a fresh one and offer to open it. Nobody surfaces that file.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The gauge itself</h2>
+    <p class="section-note">Most of these come from domains that solved "a quota that refills on a schedule" decades ago — site reliability, aviation, and finance.</p>
+
+    <h3>Reframings</h3>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">Burn rate as a dimensionless number</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">1.0 is perfect pace, below 1.0 means you will leave quota unspent. The highest-information number you can fit in 200 pixels, and it works identically for both windows.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Time remaining as the headline</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">"About 3h 40m of Claude left at your current pace." Runway framing, in the unit people actually plan in. Percent is a unit nobody plans in.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Cost in tasks, not tokens</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">"Enough for about nine more medium tasks," from your own measured average. Pilots plan in destinations, not pounds of fuel.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Show only the binding constraint</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Work out which limit bites first at current pace, show that one at full fidelity and demote the rest to a hairline. Two equal gauges make the user do the arithmetic on every glance.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Speedometer and odometer, separately</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Rate and total are different questions. Every vehicle dashboard separates them; every quota UI conflates them, which is why "I've used a lot" and "I'm using fast" feel the same.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Auto-resume aware countdown</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-new">new in 2.1.234</span></div>
+        <p class="idea-body">Since Claude Code now continues automatically at reset, the countdown deserves a distinct state: not "you get quota back" but "work restarts by itself in 12 minutes."</p>
+      </div>
+    </div>
+
+    <h3>Encodings for a 200-pixel canvas</h3>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">The pace marker</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">A one-pixel tick where the fill <em>would</em> be if you spent evenly from window start to reset. Ahead or behind, at a glance, with no text — a burndown chart's ideal line compressed to a single pixel.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Bingo fuel — a reserve you refuse to dip into</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">A user-set reserve, hatched at the end of the bar, alarming when you <em>enter</em> it rather than when you hit zero. Reframes the widget from "you are running out" to "you are spending your buffer" — a threshold you chose while calm.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Bullet graph instead of a bar</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Actual, target and qualitative bands in about ten pixels of height. Invented specifically to replace dashboard gauges, which "display too little information and require too much space."</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Reset as a depleting arc around the gauge</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Superimpose time and quota so their <em>relationship</em> is the visual. This is the Time Timer's disappearing disk — the best-validated tiny-space time encoding there is.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Cooldown sweep</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">The same idea rendered as a radial wipe. Every gamer reads an ability cooldown with no legend at all.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Regen ghost segment</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">For the rolling window, draw the incoming refill as a lighter ghost ahead of the fill — a stamina bar that shows regeneration, not just drain. "Wait twenty minutes and you get some back" is real, and currently invisible.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Sparkline with one emphasised endpoint</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Word-sized, no frame, no axis, a single coloured dot for now. Add ticks at reset boundaries or the sawtooth is unreadable.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Horizon chart for the weekly series</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Fold the series into layered bands so a week fits in twelve pixels. Below a measured chart-height threshold these beat line charts on estimation accuracy — and you are far below it.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Non-linear final decile</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Give the last 10% of quota 25% of the pixels. Fuel gauges and VU meters both put resolution where decisions happen. Say so in the tooltip.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Time-of-day heat strip</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">A three-pixel, 24-cell strip showing when in the day you burn quota. The most "I didn't know that about myself" visual available, and the data is already on disk.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Personal baseline band</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">A grey band showing your own typical range for this hour and weekday. Deviation from <em>your</em> normal is the signal; absolute numbers are noise.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Forecast wedge, not a point estimate</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Projected end-of-window usage as a translucent conservative-to-optimistic wedge past the current fill. Honest about uncertainty, which is what makes it trustworthy.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Never colour alone</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">At thresholds, change shape or pattern too — hatching, a notch, a corner cut. Already half-done via the tick and the critical glyph; worth finishing as a rule rather than a habit.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Alerting that survives being left on</h2>
+    <p class="section-note">The difference between a widget people keep and a widget people close.</p>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">Multi-window burn-rate alerting</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Never alert on an instantaneous rate. Require a short <em>and</em> a long window to both exceed a threshold, with the short one about a twelfth of the long. One heavy agentic run spikes you to 20× for four minutes; a naive widget screams and a good one does not.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">A notification-level ladder in code</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Every event maps to ignore / change-blind / make-aware / interrupt / demand, and only two events in the whole application are allowed above make-aware. Default is change-blind.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Rate-limit wall detector</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">A hook fires with an explicit rate-limit error type at the exact instant you get cut off — far better than inferring it from a percentage that updates every five minutes.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Permission-prompt escalation</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Flash when a background terminal is silently waiting on you to approve something. This is the loudest real complaint about running parallel sessions.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Interruption-aware delivery</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Hold non-urgent alerts during a detected deep-work stretch and deliver at a natural boundary. Recovery from an interruption averages around 23 minutes; the widget's superpower is being <em>seen</em> without interrupting.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">The under-use alarm</p>
+        <div class="chips"><span class="chip c-s">S</span><span class="chip c-star">no prior art</span></div>
+        <p class="idea-body">Near the end of a window with quota clearly unspent: "you are leaving quota on the table — go start something ambitious." Every tool treats over-use as the only failure. This is the funniest and kindest thing a usage widget can say.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Self-imposed interrupt budget</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">The widget may spend at most N interrupts a day and shows how many remain. A tool that visibly rations its own nagging is disarming — and it forces the interrupts to be good.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Three distinct failure states</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Stale, offline, auth-expired and rate-limited are four different problems wearing one costume today. Splitting them is cheap and buys real trust.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Behaviour, not just information</h2>
+    <p class="section-note">Every usage tool on the market stops at reflection. The research on personal informatics is blunt that the action stage is where behaviour actually changes.</p>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">An action attached to every state</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">One design rule: the widget is never allowed to show a state without a concrete suggested action. That single constraint is the difference between informative and useful.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">A policy table, not just a number</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">User-authored rules — "at 85% weekly, default to Sonnet"; "at 95%, turn on Do Not Disturb." Site reliability practice is that a budget's value comes from the policy attached to it, not the number. Almost no consumer tool copies this.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">If-then plans as a first-class object</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Let the user write an implementation intention that the widget surfaces at the trigger moment. This is the most evidence-backed idea on the whole list.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Envelope budgeting</p>
+        <div class="chips"><span class="chip c-l">L</span></div>
+        <p class="idea-body">Split the weekly quota into named envelopes — work, side project, messing about. Overspending one visibly steals from another. The friction of moving quota between envelopes <em>is</em> the mechanism.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Overdraft preview</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Before a big run: "a typical refactor costs about 6% — you would enter the reserve at 14:20."</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Monday review card</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">One card, once a week, six numbers. Reflection works at a cadence; continuous nagging does not.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Self-scoring forecasts</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Predict end-of-window usage each morning, score it at each reset, show calibration over time. Makes the projection trustworthy rather than decorative.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Explicitly no punishing streaks</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">The streak trap is well documented — unforgiving counters produce guilt and churn. If you want a consistency signal use a band, not a streak, and say "no streaks, no guilt" in the README as a positioning statement.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">A real observe-only switch</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">One toggle: never nudge, never colour, never sound, keep all history. Pressure backfires for some people and awareness alone works. Letting the user choose their mode is both kind and rare.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Reach</h2>
+    <p class="section-note">Ordered by delight per hour of work. The local endpoint and a webhook make most of this configuration rather than integration.</p>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">Outbound webhook on tier change</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">One config field. Instantly wires into phone push, Home Assistant, automation tools, Discord and Slack without you integrating with any of them.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Run a script on threshold crossing</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">With the state in environment variables. Combined with the endpoint and webhook, this is the entire extensibility story in an afternoon.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Phone push when the tank refills</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">The most useful notification a quota tool can send, because it tells you to come <em>back</em> rather than to stop.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Discord rich presence</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">"Vibespan — 62%, resets in 1h12." No authentication; it talks to the local client. Every user passively advertises the widget.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Home Assistant auto-discovery</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Publish once and the widget appears as a sensor with no user configuration, from which people wire it to lights, speakers and dashboards themselves.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Desk lamp or keyboard lighting as the gauge</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Your keyboard underglow drifting amber as the week burns is the single most "I didn't know a widget could do that" output available — and it is nearly free once the script hook exists.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Stream Deck key and dial</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">The key face is the gauge; on a model with dials, the touch strip shows the sparkline and the dial sets your reserve.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Screenshot-safe mode</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">A hotkey that keeps the shape and blanks the numbers, so screen shares do not leak your plan tier or spend. Then the inverse — a transparent browser source so streamers can deliberately show it.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">E-ink or pixel-display desk gadget</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">Several of these devices work by fetching an image from a URL, so serving one endpoint makes the widget hardware. Battery life in months, and the calmest possible surface.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">A real analogue needle</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">A six-dollar microcontroller and a panel voltmeter. Nothing you can render competes with a moving needle for charm, and the write-up alone would carry the project.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Character</h2>
+    <p class="section-note">The line, which both the design literature and the gamification backlash agree on: optional, occasional, non-blocking, never attached to a penalty.</p>
+    <div class="ideas">
+      <div class="idea">
+        <p class="idea-title">Milestones as typography, not confetti</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">The border draws itself once, over 600ms. That is the whole celebration. Restraint reads as quality.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">One sound, and make it the good news</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">A chime at reset, not at the warning. Rewarding sounds age far better than warning sounds.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Weather-report line</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">"Heavy usage moving in — at this rate you reach the reserve around 3pm; clear after the 6pm reset." Forecast framing is friendlier and more actionable than a percentage.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Sigil of the day</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">At each rollover, mint one small glyph encoding the day's shape — peak hour, total, pace — and collect them into a year grid. A contribution graph made of characters.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Your Claude Code birthday</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Yours is 20 October 2025, across 358 startups and 29,304 messages. A once-a-year card, entirely from local data, zero risk.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">A pet that is never sad</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">If there is a creature, mood maps to headroom and the worst state is "asleep," not "dying." Sleepy is charming; guilt is churn.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Across-the-room mode</p>
+        <div class="chips"><span class="chip c-s">S</span></div>
+        <p class="idea-body">Drop all text, render one colour field and a fill, readable at three metres. Pre-attentive processing is the point of an ambient device; text defeats it.</p>
+      </div>
+      <div class="idea">
+        <p class="idea-title">Screen-edge hairline</p>
+        <div class="chips"><span class="chip c-m">M</span></div>
+        <p class="idea-body">The calmest possible rendering: a two-pixel line along the bottom of the display whose length is the fill. A bezel, not a widget. This is the mode people screenshot.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>If I were picking</h2>
+    <p class="section-note">The one place on this page where order carries information.</p>
+    <ol class="order">
+      <li><div><strong>Local endpoint, webhook, script hook</strong><p>A weekend, and half this page becomes somebody else's project instead of your backlog.</p></div></li>
+      <li><div><strong>Multi-session tiles</strong><p>No network, no permissions, no prior art, and it changes what the product <em>is</em>. The registry is already on disk and updating.</p></div></li>
+      <li><div><strong>Statusline as transport</strong><p>Free live data per session and the credential-handling code — the riskiest part of the project — becomes optional.</p></div></li>
+      <li><div><strong>Burn rate, pace marker, bingo fuel, binding constraint</strong><p>The conceptual reframe. This is what makes it a fuel gauge rather than a usage meter.</p></div></li>
+      <li><div><strong>Multi-window alerting and the notification ladder</strong><p>What makes it trustworthy enough to leave running forever.</p></div></li>
+      <li><div><strong>History panel and cache-efficiency ring</strong><p>103 days are already on disk. One JSON parse.</p></div></li>
+      <li><div><strong>Under-use alarm, weather line, reset chime</strong><p>Character, cheap, and nobody else has the first one.</p></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Don't build these</h2>
+    <div class="avoid">
+      <div><strong>Cross-session messaging.</strong> Not available on native Windows at all. The capability string in your session files is an advertisement, not a bound socket.</div>
+      <div><strong>Rate limits from telemetry.</strong> Quota is explicitly not exported over OpenTelemetry. The gauges must keep their current source.</div>
+      <div><strong>Taskbar button progress.</strong> Vibespan has no taskbar button by design — that is what fixed the Z-order bug. The tray icon is the equivalent surface.</div>
+      <div><strong>The failed-telemetry spool.</strong> Anthropic's own internal analytics, present only when upload fails, with no stability contract.</div>
+      <div><strong>Anything in the daemon directory.</strong> That is key material.</div>
+      <div><strong>Prompt and API body logging.</strong> Telemetry can be told to include your raw prompts. Never set those, and say so in the README.</div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Compiled from two independent research passes, reconciled and spot-checked against Claude Code 2.1.237 on this machine. Anything marked <em>no prior art</em> means neither pass found an existing implementation — not that none exists. Undocumented files change between releases; parse defensively and never let a schema change take the widget down.</p>
+  </footer>
+
+</div>

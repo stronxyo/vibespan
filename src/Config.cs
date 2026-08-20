@@ -114,6 +114,17 @@ namespace Vibespan
         public bool ShowLogo = true;
         public bool ShowBorder = true;
 
+        // ---- display mode ----
+        // Not a Style and not an Orientation: in hairline mode the window stops being a box
+        // with rows and becomes a strip spanning a screen edge. Different geometry, different
+        // positioning, no drag - so it gets its own axis rather than being crammed into the
+        // style list.
+        public string Mode = "widget";          // widget | hairline
+        public string HairlineEdge = "bottom";  // bottom | top | left | right
+        public double HairlineThickness = 2;
+
+        public bool IsHairline { get { return Mode == "hairline"; } }
+
         // ---- appearance ----
         // Style is geometry and identity, Theme is colour. Separate axes on purpose.
         public string Style = "vibespan";
@@ -196,6 +207,9 @@ namespace Vibespan
             if (PollSeconds < 180) PollSeconds = 180;      // the endpoint 429s below this
             if (PollSeconds > 3600) PollSeconds = 3600;
             if (string.IsNullOrEmpty(ThemePreset)) ThemePreset = "claude";
+            if (Mode != "hairline") Mode = "widget";
+            if (HairlineEdge != "top" && HairlineEdge != "left" && HairlineEdge != "right") HairlineEdge = "bottom";
+            if (HairlineThickness < 1 || HairlineThickness > 8 || double.IsNaN(HairlineThickness)) HairlineThickness = 2;
             if (string.IsNullOrEmpty(Style)) Style = "vibespan";
             if (Font == null) Font = "";
             if (BarStyle == null) BarStyle = "";
@@ -255,6 +269,9 @@ namespace Vibespan
                 c.ShowLogo = w["showLogo"].AsBool(true);
                 c.ShowBorder = w["showBorder"].AsBool(true);
 
+                c.Mode = w["mode"].AsString("widget");
+                c.HairlineEdge = w["hairlineEdge"].AsString("bottom");
+                c.HairlineThickness = w["hairlineThickness"].AsDouble(2);
                 c.Style = w["style"].AsString("vibespan");
                 c.Font = w["font"].AsString("");
                 c.BarStyle = w["barStyle"].AsString("");
@@ -339,6 +356,9 @@ namespace Vibespan
             w.Set("hideFullScreen", HideFullScreen);
             w.Set("showLogo", ShowLogo);
             w.Set("showBorder", ShowBorder);
+            w.Set("mode", Mode);
+            w.Set("hairlineEdge", HairlineEdge);
+            w.Set("hairlineThickness", Math.Round(HairlineThickness, 2));
             w.Set("style", Style);
             w.Set("font", Font);
             w.Set("barStyle", BarStyle);

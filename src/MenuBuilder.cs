@@ -371,6 +371,55 @@ namespace Vibespan
         {
             var m = new MenuItem { Header = L.MenuAppearance };
 
+            // Display mode comes first: in hairline mode most of the rest of this submenu
+            // does not apply, so the user should meet the switch before the options it kills.
+            var mode = new MenuItem { Header = L.MenuMode };
+            mode.Items.Add(Radio(L.MenuModeWidget, !C.IsHairline, delegate
+            {
+                _win.SetMode("widget");
+                _win.RaiseMenuRebuild();
+            }));
+            mode.Items.Add(Radio(L.MenuModeHairline, C.IsHairline, delegate
+            {
+                _win.SetMode("hairline");
+                _win.RaiseMenuRebuild();
+            }));
+            if (C.IsHairline)
+            {
+                mode.Items.Add(new Separator());
+
+                var edge = new MenuItem { Header = L.MenuEdge };
+                string[] edges = { "bottom", "top", "left", "right" };
+                string[] edgeNames = { L.MenuEdgeBottom, L.MenuEdgeTop, L.MenuEdgeLeft, L.MenuEdgeRight };
+                for (int i = 0; i < edges.Length; i++)
+                {
+                    string cap = edges[i];
+                    edge.Items.Add(Radio(edgeNames[i], C.HairlineEdge == cap, delegate
+                    {
+                        C.HairlineEdge = cap;
+                        Changed(true);
+                    }));
+                }
+                mode.Items.Add(edge);
+
+                var thick = new MenuItem { Header = L.MenuThickness };
+                double[] px = { 1, 2, 3, 4, 6 };
+                foreach (double v in px)
+                {
+                    double cap = v;
+                    thick.Items.Add(Radio(((int)v) + " px", Math.Abs(C.HairlineThickness - v) < 0.01, delegate
+                    {
+                        C.HairlineThickness = cap;
+                        Changed(true);
+                    }));
+                }
+                mode.Items.Add(thick);
+
+                mode.Items.Add(new Separator());
+                mode.Items.Add(new MenuItem { Header = L.MenuHairlineHint, IsEnabled = false });
+            }
+            m.Items.Add(mode);
+
             var theme = new MenuItem { Header = L.MenuTheme };
             foreach (Theme.Preset p in Theme.Presets)
             {

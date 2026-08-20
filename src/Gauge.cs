@@ -449,6 +449,99 @@ namespace Vibespan
             return new Rendered { Content = grid, Tooltip = message };
         }
 
+        // ---------- hairline ----------
+        /// <summary>
+        /// The calmest rendering: one thin line per visible metric, stacked along a screen edge,
+        /// length encoding the fill. No text, no chrome, no box - a bezel rather than a widget.
+        ///
+        /// The track is drawn very faint rather than omitted: without it a 4% fill is a stub of
+        /// light with no scale to read it against, and the eye cannot tell "nearly empty" from
+        /// "not rendering".
+        /// </summary>
+        public static Rendered BuildHairline(Cfg cfg, Snapshot snap, string errorCode, DateTime lastOk)
+        {
+            var shown = new List<Bucket>();
+            foreach (Bucket b in snap.Buckets)
+            {
+                RowCfg r = cfg.Row(b.Key);
+                if (r != null && r.Visible && b.HasPercent) shown.Add(b);
+            }
+
+            bool vertical = cfg.HairlineEdge == "left" || cfg.HairlineEdge == "right";
+            double t = cfg.HairlineThickness;
+
+            var host = new StackPanel
+            {
+                Orientation = vertical ? Orientation.Horizontal : Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            // Lines sit hard against the screen edge, so the stack order flips with the edge:
+            // on a bottom edge the first metric should be the outermost line.
+            bool reverse = cfg.HairlineEdge == "bottom" || cfg.HairlineEdge == "right";
+            var ordered = new List<Bucket>(shown);
+            if (reverse) ordered.Reverse();
+
+            var tips = new List<string>();
+            foreach (Bucket b in ordered)
+            {
+                RowCfg r = cfg.Row(b.Key);
+                double pct = r.Invert ? 100 - b.Percent : b.Percent;
+                Brush fill = r.Accent != null ? Theme.B(r.Accent) : Theme.PercentBrush(cfg, b.Percent, b.Severity);
+
+                var lane = new Grid();
+                if (vertical) { lane.Width = t; lane.HorizontalAlignment = HorizontalAlignment.Stretch; }
+                else { lane.Height = t; lane.VerticalAlignment = VerticalAlignment.Stretch; }
+
+                var track = new Border { Background = Theme.Brush_(cfg, Theme.Track), Opacity = 0.35 };
+                lane.Children.Add(track);
+
+                var bar = new Border { Background = fill };
+                if (vertical)
+                {
+                    bar.VerticalAlignment = VerticalAlignment.Bottom;   // a level fills upward
+                    bar.HorizontalAlignment = HorizontalAlignment.Stretch;
+                }
+                else
+                {
+                    bar.HorizontalAlignment = HorizontalAlignment.Left;
+                    bar.VerticalAlignment = VerticalAlignment.Stretch;
+                }
+                // Proportion is resolved at layout time against whatever the edge measures,
+                // so the line stays correct across monitors of different widths.
+                bar.Tag = pct;
+                lane.SizeChanged += delegate (object sender, SizeChangedEventArgs e)
+                {
+                    var g = (Grid)sender;
+                    double frac = Math.Max(0, Math.Min(100, (double)bar.Tag)) / 100.0;
+                    if (vertical) bar.Height = Math.Max(frac > 0 ? 2 : 0, g.ActualHeight * frac);
+                    else bar.Width = Math.Max(frac > 0 ? 2 : 0, g.ActualWidth * frac);
+                };
+                lane.Children.Add(bar);
+                host.Children.Add(lane);
+            }
+
+            // The line carries no text, so the tooltip is the only readout. Build it in the
+            // metrics' configured order, not the reversed draw order.
+            foreach (Bucket b in shown)
+            {
+                RowCfg r = cfg.Row(b.Key);
+                string line = b.LongLabel + L.Colon + PercentText(b, r);
+                string reset = Fmt.Countdown(b.ResetsAt);
+                if (reset.Length > 0) line += " (" + string.Format(L.ResetsIn, reset) + ")";
+                if (b.IsActive) line += "  • " + L.ActiveLimit;
+                tips.Add(line);
+            }
+            if (tips.Count == 0) tips.Add(L.Loading);
+            tips.Add(string.Format(L.Updated, lastOk.ToString("HH:mm")) + "  — " +
+                     (snap.Source == Provenance.Feed ? L.SourceLive : L.SourcePolled));
+            if (errorCode != null)
+                tips.Add(string.Format(L.FrozenFor, Fmt.Age(DateTime.Now - lastOk), Fmt.ErrorText(errorCode)));
+
+            return new Rendered { Content = host, Tooltip = string.Join(Environment.NewLine, tips.ToArray()) };
+        }
+
         public static Rendered Build(Cfg cfg, Snapshot snap, string errorCode, DateTime lastOk)
         {
             StylePreset st = Styles.For(cfg);

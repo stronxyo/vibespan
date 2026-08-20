@@ -140,6 +140,36 @@ namespace Vibespan
         {
             StylePreset st = Styles.For(Config);
 
+            if (Config.IsHairline)
+            {
+                // No plate, no padding, no radius, no mark: in hairline mode the only thing
+                // that should be visible on screen is the lines themselves.
+                _root.Background = Brushes.Transparent;
+                _root.BorderBrush = Brushes.Transparent;
+                _root.BorderThickness = new Thickness(0);
+                _root.CornerRadius = new CornerRadius(0);
+                _root.Padding = new Thickness(0);
+                _logoHost.Content = null;
+                _logoCol.Width = new GridLength(0);
+                _grip.Visibility = Visibility.Collapsed;
+
+                // The content column is Auto in widget mode, which sizes to the rows. A strip
+                // has to fill the monitor instead, so it becomes Star and the slot stretches -
+                // otherwise every line renders at its 2px minimum and the strip looks broken.
+                _shell.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
+                _slot.HorizontalAlignment = HorizontalAlignment.Stretch;
+                _slot.VerticalAlignment = VerticalAlignment.Stretch;
+
+                Opacity = Config.ContentOpacity;
+                TextOptions.SetTextFormattingMode(_root, TextFormattingMode.Ideal);
+                return;
+            }
+
+            _root.BorderThickness = new Thickness(1);
+            _grip.Visibility = Visibility.Visible;
+            _shell.ColumnDefinitions[1].Width = GridLength.Auto;
+            _slot.HorizontalAlignment = HorizontalAlignment.Stretch;
+            _slot.VerticalAlignment = VerticalAlignment.Center;
             _root.Background = Theme.BackgroundBrush(Config);
             _root.BorderBrush = Config.ShowBorder ? Theme.Brush_(Config, Theme.Border) : Brushes.Transparent;
             _root.CornerRadius = new CornerRadius(st.Radius);
@@ -253,6 +283,7 @@ namespace Vibespan
         /// </summary>
         public void ApplyPosition()
         {
+            if (Config.IsHairline) { ApplyHairlineGeometry(); return; }
             UpdateLayout();
             Native.RECT r; CurrentRect(out r);
             int w = r.Width > 0 ? r.Width : 200, h = r.Height > 0 ? r.Height : 44;
@@ -266,6 +297,82 @@ namespace Vibespan
             }
 
             MoveToDefaultCorner();
+        }
+
+        /// <summary>
+        /// Lay the window flat against one edge of the monitor it currently sits on. Sizing is
+        /// explicit here rather than SizeToContent - the strip must match the display, not the
+        /// content - so SizeToContent is turned off for the duration of hairline mode.
+        /// </summary>
+        void ApplyHairlineGeometry()
+        {
+            if (_hwnd == IntPtr.Zero) return;
+            SizeToContent = SizeToContent.Manual;
+
+            System.Drawing.Rectangle b = TargetScreenBounds();
+            int rows = VisibleRowCount();
+            if (rows < 1) rows = 1;
+            int thick = (int)Math.Max(1, Math.Round(Config.HairlineThickness * Config.Scale)) * rows;
+
+            int x, y, w, h;
+            switch (Config.HairlineEdge)
+            {
+                case "top":   x = b.Left;           y = b.Top;            w = b.Width; h = thick;    break;
+                case "left":  x = b.Left;           y = b.Top;            w = thick;   h = b.Height; break;
+                case "right": x = b.Right - thick;  y = b.Top;            w = thick;   h = b.Height; break;
+                default:      x = b.Left;           y = b.Bottom - thick; w = b.Width; h = thick;    break;
+            }
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, w, h, Native.SWP_NOACTIVATE);
+        }
+
+        int VisibleRowCount()
+        {
+            if (_snap == null) return 1;
+            int n = 0;
+            foreach (Bucket bu in _snap.Buckets)
+            {
+                RowCfg r = Config.Row(bu.Key);
+                if (r != null && r.Visible && bu.HasPercent) n++;
+            }
+            return n;
+        }
+
+        /// <summary>The monitor the widget last lived on, falling back to the primary.</summary>
+        System.Drawing.Rectangle TargetScreenBounds()
+        {
+            if (!string.IsNullOrEmpty(Config.Monitor))
+            {
+                foreach (System.Windows.Forms.Screen sc in System.Windows.Forms.Screen.AllScreens)
+                    if (sc.DeviceName == Config.Monitor) return sc.Bounds;
+            }
+            if (!double.IsNaN(Config.X) && !double.IsNaN(Config.Y))
+            {
+                System.Windows.Forms.Screen sc = System.Windows.Forms.Screen.FromPoint(
+                    new System.Drawing.Point((int)Config.X, (int)Config.Y));
+                if (sc != null) return sc.Bounds;
+            }
+            return System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+        }
+
+        /// <summary>Switch display mode, restoring the sizing model the other mode needs.</summary>
+        public void SetMode(string mode)
+        {
+            Config.Mode = mode;
+            if (Config.IsHairline)
+            {
+                ApplyTheme();
+                Redraw();
+                ApplyHairlineGeometry();
+            }
+            else
+            {
+                SizeToContent = SizeToContent.WidthAndHeight;
+                ApplyTheme();
+                Redraw();
+                UpdateLayout();
+                ApplyPosition();
+            }
+            Config.Save();
         }
 
         public void MoveToDefaultCorner()
@@ -307,6 +414,7 @@ namespace Vibespan
         void OnBodyMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (_sizing) return;
+            if (Config.IsHairline) return;                 // the strip is pinned to an edge
             if (e.OriginalSource == _grip) return;         // the grip runs its own gesture
             try { DragMove(); SavePosition(); } catch { }  // throws if the button is already up
         }
@@ -409,19 +517,26 @@ namespace Vibespan
         {
             if (_hwnd == IntPtr.Zero) return;
 
-            bool hide = Config.HideFullScreen && ForegroundIsFullScreen();
+            // Only hide for a full-screen app sharing OUR display. A game on the laptop panel
+            // is no reason to blank a widget parked on the second monitor - the earlier version
+            // hid unconditionally, which made the widget vanish for no visible cause.
+            bool hide = Config.HideFullScreen && FullScreenAppOnOurMonitor();
             if (hide != _hiddenForFullScreen)
             {
                 _hiddenForFullScreen = hide;
                 Visibility = hide ? Visibility.Hidden : Visibility.Visible;
             }
             // Re-asserting topmost over a full-screen game can kick it out of its display mode
-            // or stutter it, so while hidden we stop touching the Z-order entirely.
+            // or stutter it, so while hidden we stop touching the Z-order entirely. On a
+            // different display we are not over it, so normal operation continues.
             if (hide) return;
             Native.ReassertTopmost(_hwnd);
         }
 
-        bool ForegroundIsFullScreen()
+        /// <summary>
+        /// True only when a full-screen application occupies the same monitor as the widget.
+        /// </summary>
+        bool FullScreenAppOnOurMonitor()
         {
             IntPtr fg = Native.GetForegroundWindow();
             if (fg == IntPtr.Zero || fg == _hwnd) return false;
@@ -430,6 +545,13 @@ namespace Vibespan
             string cls = Native.ClassOf(fg);
             if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" ||
                 cls == "Shell_SecondaryTrayWnd" || cls == "Windows.UI.Core.CoreWindow") return false;
+
+            // Compare monitor handles, not rectangles: two displays can share coordinates in
+            // odd multi-monitor arrangements, and the handle is what Windows itself keys on.
+            IntPtr fgMon = Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST);
+            IntPtr myMon = Native.MonitorFromWindow(_hwnd, Native.MONITOR_DEFAULTTONEAREST);
+            if (fgMon == IntPtr.Zero || myMon == IntPtr.Zero) return false;
+            if (fgMon != myMon) return false;          // their screen, not ours
 
             Native.RECT r;
             if (!Native.GetWindowRect(fg, out r)) return false;
@@ -442,6 +564,8 @@ namespace Vibespan
             bool covers = r.Left <= mon.Left && r.Top <= mon.Top && r.Right >= mon.Right && r.Bottom >= mon.Bottom;
             if (covers) return true;
 
+            // Exclusive-mode D3D. This signal is system-wide with no monitor attached, so it is
+            // only trusted once the foreground window has already been confirmed to be ours.
             int state;
             if (Native.SHQueryUserNotificationState(out state) == 0)
                 return state == Native.QUNS_RUNNING_D3D_FULL_SCREEN || state == Native.QUNS_PRESENTATION_MODE;
@@ -548,7 +672,11 @@ namespace Vibespan
         {
             Gauge.Rendered r;
             if (_snap != null)
-                r = Gauge.Build(Config, _snap, _lastError, _lastOk);
+                r = Config.IsHairline
+                    ? Gauge.BuildHairline(Config, _snap, _lastError, _lastOk)
+                    : Gauge.Build(Config, _snap, _lastError, _lastOk);
+            else if (Config.IsHairline)
+                r = new Gauge.Rendered { Content = new Grid(), Tooltip = L.Loading };
             else
                 r = Gauge.BuildMessage(Config,
                         _lastError == null ? L.Loading : string.Format(L.Offline, Fmt.ErrorText(_lastError)));
@@ -567,9 +695,14 @@ namespace Vibespan
             }
             else
             {
-                _root.BorderBrush = Config.ShowBorder ? Theme.Brush_(Config, Theme.Border) : Brushes.Transparent;
+                _root.BorderBrush = Config.ShowBorder && !Config.IsHairline
+                    ? Theme.Brush_(Config, Theme.Border) : Brushes.Transparent;
                 _slot.Opacity = 1.0;
             }
+
+            // The strip's thickness is a function of how many metrics are visible, so ticking a
+            // row on or off has to resize the window, not just repaint it.
+            if (Config.IsHairline) ApplyHairlineGeometry();
         }
 
         /// <summary>Full rebuild after a settings change.</summary>
@@ -580,6 +713,7 @@ namespace Vibespan
             ApplyClickThrough();
             Redraw();
             UpdateLayout();
+            if (Config.IsHairline) ApplyHairlineGeometry();
         }
 
         public Snapshot CurrentSnapshot { get { return _snap; } }

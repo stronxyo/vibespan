@@ -42,12 +42,14 @@ row, four themes, size, opacity, orientation, alert thresholds.
 - **Show remaining instead of used**, per row
 - **Resize by dragging the corner** or from the Size menu — the two snap to the same steps
 - **Four themes** including a colour-blind-safe one, plus a custom colour per row
-- **Horizontal or vertical** layout
+- **Horizontal or vertical** layout, or **screen-edge hairline** mode — the widget becomes a
+  few pixels of line along an edge of the display, one line per metric, no text at all
 - **Threshold alerts** at your chosen percentages, once per window, silent by default
 - **Refresh interval** from 3 to 30 minutes
 - **Gets out of the way of games** — hides while a full-screen app is in front, including
   borderless-fullscreen, and stops re-asserting topmost so it cannot kick a game out of its
-  display mode
+  display mode. **Only on the affected monitor**: a game on one screen leaves the widget alone
+  on the others
 - **Goes visibly stale** — amber then red border, gauges fade — when the data is more than
   12 minutes old, so a frozen number never looks like a fresh one
 - **Tray icon** tinted by your worst limit, which is also how you get the widget back if you
@@ -170,8 +172,8 @@ Right-click the widget. Everything lives there:
 - **&lt;each visible metric&gt;** — layout preset, **show label**, reset format, remaining-vs-used,
   colour
 - **Size** — 75% to 200%, or drag the bottom-right corner (it snaps to the same steps)
-- **Appearance** — **style**, theme, **font**, **bar style**, **mark**, opacity, orientation,
-  border
+- **Appearance** — **display mode** (widget or screen-edge hairline, with edge and line
+  thickness), style, theme, font, bar style, mark, opacity, orientation, border
 - **Alerts** — thresholds, sound, mute for an hour
 - **Behaviour** — full-screen hiding, click-through, autostart, **refresh interval**, live
   feed, bring to centre
