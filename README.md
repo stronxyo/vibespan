@@ -9,6 +9,10 @@ right-click.
 It sits above the taskbar and never disappears behind it, because the executable is built
 with the `uiAccess` privilege — the same one the Magnifier and the on-screen keyboard use.
 
+<img src="docs/mode.gif" alt="The widget collapsing from a card into a screen-edge hairline" width="460">
+
+Same gauge, two shapes: a card on the desktop, or a few pixels of line along a screen edge.
+
 ## What makes it different
 
 **It discovers what to show instead of hardcoding it.** The usage endpoint returns the same
