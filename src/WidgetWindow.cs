@@ -1,0 +1,598 @@
+// The widget window.
+//
+// The window-management choices here are the ones the spikes in docs/SPIKES.md settled;
+// several look arbitrary until you read why:
+//
+//   * ShowInTaskbar stays TRUE and WS_EX_TOOLWINDOW does the hiding. Setting it false makes
+//     WPF create a hidden owner window with no WS_EX_TOPMOST, and an owned window's Z-band
+//     follows its owner's - measured GW_OWNER=721118, owner EXSTYLE=0x100.
+//   * No WS_EX_NOACTIVATE. WPF menu dismissal is capture-based and only a foreground window
+//     gets full capture, so the style would leave the settings menu permanently open.
+//     WM_MOUSEACTIVATE is answered selectively instead: left button never activates (drag
+//     must not steal focus from an editor), everything else does.
+//   * Resizing is NOT the OS resize loop. ResizeMode=NoResize strips WS_THICKFRAME
+//     (measured STYLE=0x16080000), so HTBOTTOMRIGHT is a no-op. A grip captures the mouse
+//     and the scale is applied on CompositionTarget.Rendering from an ABSOLUTE screen-space
+//     mapping - applying it inside a drag event instead is unstable, because resizing moves
+//     the grip under the cursor and re-triggers the event.
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
+
+namespace Vibespan
+{
+    public class WidgetWindow : Window
+    {
+        public Cfg Config;
+
+        Border _root;
+        ContentControl _slot;
+        Border _grip;
+        ScaleTransform _scale;
+        ContentControl _logoHost;
+        Grid _shell;
+        ColumnDefinition _logoCol;
+
+        IntPtr _hwnd = IntPtr.Zero;
+        HwndSourceHook _hook;                 // kept in a field: a collected delegate crashes
+
+        Snapshot _snap;
+        string _lastError;
+        DateTime _lastOk = DateTime.MinValue;
+        bool _hiddenForFullScreen;
+
+        DispatcherTimer _poll, _tick, _feedWatch;
+        int _currentIntervalSeconds;
+        DateTime _feedStamp = DateTime.MinValue;
+
+        public Alerts Alerts;
+        public event Action MenuNeedsRebuild;
+        public event Action<Snapshot> SnapshotUpdated;
+
+        static Strings L { get { return I18n.T; } }
+
+        public WidgetWindow(Cfg cfg)
+        {
+            Config = cfg;
+            I18n.Use(cfg.Lang);
+            Config.Lang = L.Code;
+
+            WindowStyle = WindowStyle.None;
+            AllowsTransparency = true;
+            Background = Brushes.Transparent;
+            Topmost = true;
+            ShowInTaskbar = true;              // WS_EX_TOOLWINDOW hides it; see header
+            ResizeMode = ResizeMode.NoResize;
+            SizeToContent = SizeToContent.WidthAndHeight;
+            ShowActivated = false;
+            Title = "Vibespan";
+            UseLayoutRounding = true;
+            Opacity = cfg.ContentOpacity;
+
+            BuildChrome();
+            Alerts = new Alerts(this);
+
+            Loaded += delegate { OnLoadedOnce(); };
+            MouseLeftButtonDown += OnBodyMouseDown;
+        }
+
+        // ---------- chrome ----------
+        void BuildChrome()
+        {
+            _scale = new ScaleTransform(Config.Scale, Config.Scale);
+
+            _logoHost = new ContentControl
+            {
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _slot = new ContentControl { VerticalAlignment = VerticalAlignment.Center };
+
+            _shell = new Grid();
+            _logoCol = new ColumnDefinition { Width = new GridLength(Gauge.LogoColumn) };
+            _shell.ColumnDefinitions.Add(_logoCol);
+            _shell.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(_logoHost, 0);
+            Grid.SetColumn(_slot, 1);
+            _shell.Children.Add(_logoHost);
+            _shell.Children.Add(_slot);
+
+            // The grip must sit inside the opaque border: a layered window hit-tests from the
+            // alpha channel before the wndproc, so anything on alpha 0 is not clickable.
+            _grip = new Border
+            {
+                Width = 9, Height = 9,
+                Background = Theme.B("#01000000"),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Cursor = Cursors.SizeNWSE,
+                Margin = new Thickness(0, 0, -4, -1)
+            };
+            _grip.MouseLeftButtonDown += GripDown;
+            _grip.MouseLeftButtonUp += GripUp;
+
+            var outer = new Grid();
+            outer.Children.Add(_shell);
+            outer.Children.Add(_grip);
+
+            _root = new Border
+            {
+                CornerRadius = new CornerRadius(7),
+                Padding = new Thickness(8, 3, 8, 3),
+                BorderThickness = new Thickness(1),
+                Child = outer
+            };
+            _root.LayoutTransform = _scale;
+            Content = _root;
+
+            ApplyTheme();
+        }
+
+        public void ApplyTheme()
+        {
+            _root.Background = Theme.BackgroundBrush(Config);
+            _root.BorderBrush = Config.ShowBorder ? Theme.Brush_(Config, Theme.Border) : Brushes.Transparent;
+            _logoHost.Content = Config.ShowLogo ? Gauge.Logo(14, Theme.Brush_(Config, Theme.Logo)) : null;
+            _logoCol.Width = new GridLength(Config.ShowLogo ? Gauge.LogoColumn : 0);
+            Opacity = Config.ContentOpacity;
+            // Display mode is crisper for small text at exactly 1.0, but it assumes the integer
+            // pixel grid and looks wrong at fractional scale, where Ideal degrades gracefully.
+            TextOptions.SetTextFormattingMode(_root,
+                Math.Abs(Config.Scale - 1.0) < 0.001 ? TextFormattingMode.Display : TextFormattingMode.Ideal);
+        }
+
+        // ---------- startup ----------
+        void OnLoadedOnce()
+        {
+            _hwnd = new WindowInteropHelper(this).Handle;
+
+            Native.AddExStyle(_hwnd, Native.WS_EX_TOOLWINDOW);
+            ApplyClickThrough();
+
+            HwndSource src = HwndSource.FromHwnd(_hwnd);
+            _hook = new HwndSourceHook(WndProc);
+            src.AddHook(_hook);
+
+            Log.Write("started; uiAccess=" + (Native.HasUiAccess() ? "yes" : "NO (window will sit under the taskbar)"));
+
+            ApplyPosition();
+            Native.ReassertTopmost(_hwnd);
+
+            Redraw();
+            Refresh();
+
+            _currentIntervalSeconds = Config.PollSeconds;
+            _poll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_currentIntervalSeconds) };
+            _poll.Tick += delegate { Refresh(); };
+            _poll.Start();
+
+            // Redraw so the countdowns stay alive without re-fetching.
+            _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            _tick.Tick += delegate { if (_snap != null) Redraw(); };
+            _tick.Start();
+
+            _feedWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _feedWatch.Tick += delegate { PollFeedFile(); };
+            _feedWatch.Start();
+        }
+
+        // ---------- wndproc ----------
+        IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wp, IntPtr lp, ref bool handled)
+        {
+            if (msg == Native.WM_MOUSEACTIVATE)
+            {
+                int trigger = ((int)lp >> 16) & 0xFFFF;
+                handled = true;
+                // Left button: never activate, so dragging the widget does not pull focus out
+                // of whatever the user is working in. Anything else (right-click) activates,
+                // which is what makes the context menu dismissable.
+                return new IntPtr(trigger == Native.WM_LBUTTONDOWN ? Native.MA_NOACTIVATE : Native.MA_ACTIVATE);
+            }
+            if (msg == Native.WM_DISPLAYCHANGE)
+            {
+                Dispatcher.BeginInvoke(new Action(delegate { ApplyPosition(); }), DispatcherPriority.Background);
+            }
+            return IntPtr.Zero;
+        }
+
+        // ---------- position ----------
+        static System.Drawing.Rectangle[] Screens()
+        {
+            var list = new List<System.Drawing.Rectangle>();
+            foreach (System.Windows.Forms.Screen s in System.Windows.Forms.Screen.AllScreens)
+                list.Add(s.Bounds);
+            return list.ToArray();
+        }
+
+        static bool RectIsVisible(int x, int y, int w, int h)
+        {
+            // Require a decent chunk on-screen, not merely a touching corner.
+            var want = new System.Drawing.Rectangle(x, y, Math.Max(1, w), Math.Max(1, h));
+            foreach (System.Drawing.Rectangle s in Screens())
+            {
+                System.Drawing.Rectangle i = System.Drawing.Rectangle.Intersect(s, want);
+                if (i.Width >= Math.Min(40, want.Width) && i.Height >= Math.Min(20, want.Height)) return true;
+            }
+            return false;
+        }
+
+        void CurrentRect(out Native.RECT r)
+        {
+            if (!Native.GetWindowRect(_hwnd, out r)) r = new Native.RECT();
+        }
+
+        /// <summary>
+        /// Restore the saved position, or fall back to the bottom-left of the primary screen.
+        /// Everything here is physical pixels: WPF's Left/Top are converted using the CURRENT
+        /// monitor's scale factor, which makes them unreliable across a multi-monitor desktop.
+        /// </summary>
+        public void ApplyPosition()
+        {
+            UpdateLayout();
+            Native.RECT r; CurrentRect(out r);
+            int w = r.Width > 0 ? r.Width : 200, h = r.Height > 0 ? r.Height : 44;
+
+            if (!double.IsNaN(Config.X) && !double.IsNaN(Config.Y) &&
+                RectIsVisible((int)Config.X, (int)Config.Y, w, h))
+            {
+                Native.SetWindowPos(_hwnd, IntPtr.Zero, (int)Config.X, (int)Config.Y, 0, 0,
+                                    Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+                return;
+            }
+
+            MoveToDefaultCorner();
+        }
+
+        public void MoveToDefaultCorner()
+        {
+            UpdateLayout();
+            Native.RECT r; CurrentRect(out r);
+            int w = r.Width > 0 ? r.Width : 200, h = r.Height > 0 ? r.Height : 44;
+            System.Drawing.Rectangle wa = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
+            int x = wa.Left + 8, y = wa.Bottom - h - 4;
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            SavePosition();
+        }
+
+        /// <summary>Rescue path from the tray, for a widget dragged onto a monitor that is now gone.</summary>
+        public void BringToCentre()
+        {
+            UpdateLayout();
+            Native.RECT r; CurrentRect(out r);
+            System.Drawing.Rectangle wa = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
+            int x = wa.Left + (wa.Width - r.Width) / 2, y = wa.Top + (wa.Height - r.Height) / 2;
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            Visibility = Visibility.Visible;
+            _hiddenForFullScreen = false;
+            SavePosition();
+        }
+
+        public void SavePosition()
+        {
+            Native.RECT r; CurrentRect(out r);
+            if (r.Width == 0) return;
+            Config.X = r.Left; Config.Y = r.Top;
+            System.Windows.Forms.Screen s = System.Windows.Forms.Screen.FromPoint(
+                new System.Drawing.Point(r.Left + r.Width / 2, r.Top + r.Height / 2));
+            Config.Monitor = s != null ? s.DeviceName : null;
+            Config.Save();
+        }
+
+        // ---------- drag to move ----------
+        void OnBodyMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_sizing) return;
+            if (e.OriginalSource == _grip) return;         // the grip runs its own gesture
+            try { DragMove(); SavePosition(); } catch { }  // throws if the button is already up
+        }
+
+        // ---------- resize ----------
+        bool _sizing;
+        Native.POINT _anchor;
+        double _startScale;
+        static readonly double[] Presets = { 0.75, 1.0, 1.25, 1.5, 2.0 };
+        const double RefPx = 220.0, MinScale = 0.6, MaxScale = 3.0;
+
+        void GripDown(object sender, MouseButtonEventArgs e)
+        {
+            _sizing = true;
+            _startScale = Config.Scale;
+            Native.GetCursorPos(out _anchor);
+            _grip.CaptureMouse();
+            CompositionTarget.Rendering += OnSizeFrame;
+            e.Handled = true;
+        }
+
+        void GripUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_sizing) return;
+            EndSizing();
+            e.Handled = true;
+        }
+
+        void EndSizing()
+        {
+            _sizing = false;
+            CompositionTarget.Rendering -= OnSizeFrame;
+            _grip.ReleaseMouseCapture();
+
+            // Magnet-snap so a dragged widget lands exactly on a menu preset and the radio
+            // item lights up - drag and the Size menu then feel like one feature, not two.
+            foreach (double p in Presets)
+                if (Math.Abs(Config.Scale - p) <= 0.04) { SetScale(p); break; }
+
+            ApplyTheme();          // text formatting mode depends on whether scale == 1.0
+            SavePosition();
+            Config.Save();
+            if (MenuNeedsRebuild != null) MenuNeedsRebuild();
+        }
+
+        void OnSizeFrame(object sender, EventArgs e)
+        {
+            Native.POINT p;
+            if (!Native.GetCursorPos(out p)) return;
+            double dx = p.X - _anchor.X, dy = p.Y - _anchor.Y;
+            double target = _startScale * (1 + (dx + dy) / RefPx);
+            if (target < MinScale) target = MinScale;
+            if (target > MaxScale) target = MaxScale;
+            if (Math.Abs(target - Config.Scale) < 0.002) return;   // idempotent: this kills the loop
+            SetScale(target);
+        }
+
+        /// <summary>
+        /// Apply a scale, keeping the corner nearest the screen edge pinned. SizeToContent grows
+        /// right and down from a fixed origin, so without this a bottom-docked widget walks off
+        /// the bottom of the screen as it grows.
+        /// </summary>
+        public void SetScale(double s)
+        {
+            Native.RECT before; CurrentRect(out before);
+            Native.RECT mon;
+            bool haveMon = Native.TryMonitorRect(_hwnd, out mon);
+            bool anchorRight = haveMon && (before.Left + before.Width / 2) > (mon.Left + mon.Width / 2);
+            bool anchorBottom = haveMon && (before.Top + before.Height / 2) > (mon.Top + mon.Height / 2);
+
+            Config.Scale = s;
+            _scale.ScaleX = s; _scale.ScaleY = s;
+            _root.InvalidateMeasure();
+            UpdateLayout();
+
+            Native.RECT after; CurrentRect(out after);
+            int left = anchorRight ? before.Right - after.Width : before.Left;
+            int top = anchorBottom ? before.Bottom - after.Height : before.Top;
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, left, top, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        }
+
+        public void SetScaleAndSave(double s)
+        {
+            SetScale(s);
+            ApplyTheme();
+            SavePosition();
+            Config.Save();
+        }
+
+        // ---------- click-through ----------
+        public void ApplyClickThrough()
+        {
+            if (_hwnd == IntPtr.Zero) return;
+            if (Config.ClickThrough) Native.AddExStyle(_hwnd, Native.WS_EX_TRANSPARENT);
+            else Native.RemoveExStyle(_hwnd, Native.WS_EX_TRANSPARENT);
+        }
+
+        // ---------- topmost / full screen ----------
+        public void EvaluateTopmost()
+        {
+            if (_hwnd == IntPtr.Zero) return;
+
+            bool hide = Config.HideFullScreen && ForegroundIsFullScreen();
+            if (hide != _hiddenForFullScreen)
+            {
+                _hiddenForFullScreen = hide;
+                Visibility = hide ? Visibility.Hidden : Visibility.Visible;
+            }
+            // Re-asserting topmost over a full-screen game can kick it out of its display mode
+            // or stutter it, so while hidden we stop touching the Z-order entirely.
+            if (hide) return;
+            Native.ReassertTopmost(_hwnd);
+        }
+
+        bool ForegroundIsFullScreen()
+        {
+            IntPtr fg = Native.GetForegroundWindow();
+            if (fg == IntPtr.Zero || fg == _hwnd) return false;
+
+            // The desktop and the shell permanently span the screen.
+            string cls = Native.ClassOf(fg);
+            if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" ||
+                cls == "Shell_SecondaryTrayWnd" || cls == "Windows.UI.Core.CoreWindow") return false;
+
+            Native.RECT r;
+            if (!Native.GetWindowRect(fg, out r)) return false;
+            Native.RECT mon;
+            if (!Native.TryMonitorRect(fg, out mon)) return false;
+
+            // rcMonitor, not rcWork: a merely maximized window stops at the taskbar and must
+            // not count. This is the check that catches borderless fullscreen, which is what
+            // SHQueryUserNotificationState misses.
+            bool covers = r.Left <= mon.Left && r.Top <= mon.Top && r.Right >= mon.Right && r.Bottom >= mon.Bottom;
+            if (covers) return true;
+
+            int state;
+            if (Native.SHQueryUserNotificationState(out state) == 0)
+                return state == Native.QUNS_RUNNING_D3D_FULL_SCREEN || state == Native.QUNS_PRESENTATION_MODE;
+            return false;
+        }
+
+        // ---------- data ----------
+        public void Refresh()
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                UsageResult res = Api.Fetch();
+                Dispatcher.BeginInvoke(new Action(delegate { ApplyResult(res); }));
+            });
+        }
+
+        void ApplyResult(UsageResult res)
+        {
+            if (res.Ok)
+            {
+                if (_lastError != null) Log.Write("refresh recovered");
+                MergeSnapshot(res.Snapshot);
+                _lastError = null;
+                _lastOk = DateTime.Now;
+                SetInterval(Config.PollSeconds);
+            }
+            else
+            {
+                Log.Write("refresh failed: " + res.Error);
+                _lastError = res.Error;
+                // Back OFF on failure. The predecessor tightened to one minute here, which on
+                // an endpoint that 429s without a Retry-After makes the situation worse.
+                int cap = res.RateLimited ? 900 : 600;
+                SetInterval(Math.Min(cap, Math.Max(Config.PollSeconds, _currentIntervalSeconds * 2)));
+            }
+            Redraw();
+        }
+
+        void SetInterval(int seconds)
+        {
+            if (_poll == null || seconds == _currentIntervalSeconds) return;
+            _currentIntervalSeconds = seconds;
+            _poll.Interval = TimeSpan.FromSeconds(seconds);
+            Log.Write("poll interval -> " + seconds + "s");
+        }
+
+        /// <summary>Adopt a new snapshot and make sure every discovered bucket has a row.</summary>
+        void MergeSnapshot(Snapshot s)
+        {
+            _snap = s;
+            bool added = false;
+            foreach (Bucket b in s.Buckets)
+                if (Config.Row(b.Key) == null) { Config.EnsureRow(b.Key); added = true; }
+            if (added)
+            {
+                ReorderSnapshot();
+                Config.Save();
+                if (MenuNeedsRebuild != null) MenuNeedsRebuild();
+            }
+            else ReorderSnapshot();
+
+            if (Alerts != null) Alerts.Evaluate(s, Config);
+            if (SnapshotUpdated != null) SnapshotUpdated(s);
+        }
+
+        // ---------- live feed ----------
+        void PollFeedFile()
+        {
+            if (!Config.UseLiveFeed) return;
+            try
+            {
+                if (!File.Exists(Cfg.FeedPath)) return;
+                DateTime stamp = File.GetLastWriteTimeUtc(Cfg.FeedPath);
+                if (stamp <= _feedStamp) return;
+                _feedStamp = stamp;
+
+                JNode j = JsonReader.Parse(File.ReadAllText(Cfg.FeedPath));
+                Snapshot feed = Snapshot.FromFeed(j["rate_limits"]);
+                if (feed.Buckets.Count == 0) return;
+
+                // The feed only carries session and weekly. Keep everything the poll found
+                // for the other buckets, so enabling the feed never loses rows.
+                if (_snap != null)
+                {
+                    foreach (Bucket old in _snap.Buckets)
+                        if (feed.Find(old.Key) == null) feed.Buckets.Add(old);
+                }
+                MergeSnapshot(feed);
+                _lastError = null;
+                _lastOk = DateTime.Now;
+                Redraw();
+            }
+            catch { }
+        }
+
+        // ---------- render ----------
+        public void Redraw()
+        {
+            Gauge.Rendered r;
+            if (_snap != null)
+                r = Gauge.Build(Config, _snap, _lastError, _lastOk);
+            else
+                r = Gauge.BuildMessage(Config,
+                        _lastError == null ? L.Loading : string.Format(L.Offline, Fmt.ErrorText(_lastError)));
+
+            _slot.Content = r.Content;
+            _root.ToolTip = r.Tooltip;
+
+            // Past two missed cycles the numbers on screen mean nothing, so make the stall
+            // visible rather than letting a frozen value pass for a fresh one.
+            if (_lastError != null && _lastOk != DateTime.MinValue)
+            {
+                TimeSpan age = DateTime.Now - _lastOk;
+                bool stale = age.TotalMinutes >= 12;
+                _root.BorderBrush = Theme.B(stale ? "#CCE05252" : "#99E8A33D");
+                _slot.Opacity = stale ? 0.45 : 1.0;
+            }
+            else
+            {
+                _root.BorderBrush = Config.ShowBorder ? Theme.Brush_(Config, Theme.Border) : Brushes.Transparent;
+                _slot.Opacity = 1.0;
+            }
+        }
+
+        /// <summary>Full rebuild after a settings change.</summary>
+        public void RefreshAppearance()
+        {
+            _scale.ScaleX = Config.Scale; _scale.ScaleY = Config.Scale;
+            ApplyTheme();
+            ApplyClickThrough();
+            Redraw();
+            UpdateLayout();
+        }
+
+        public Snapshot CurrentSnapshot { get { return _snap; } }
+        public IntPtr Handle { get { return _hwnd; } }
+        public Border RootBorder { get { return _root; } }
+
+        public void RaiseMenuRebuild()
+        {
+            if (MenuNeedsRebuild != null) MenuNeedsRebuild();
+        }
+
+        /// <summary>
+        /// Re-sort the live snapshot into the configured row order. Render order follows the
+        /// snapshot, so without this a "move up" would not visibly do anything until the next
+        /// poll replaced the data.
+        /// </summary>
+        public void ReorderSnapshot()
+        {
+            if (_snap == null) return;
+            var ordered = new List<Bucket>();
+            foreach (RowCfg r in Config.Rows)
+            {
+                Bucket b = _snap.Find(r.Key);
+                if (b != null) ordered.Add(b);
+            }
+            foreach (Bucket b in _snap.Buckets)          // anything not yet in config keeps its place
+                if (!ordered.Contains(b)) ordered.Add(b);
+            _snap.Buckets = ordered;
+        }
+
+        /// <summary>Bring the window to the foreground so a programmatically opened menu can dismiss.</summary>
+        public void ForceForeground()
+        {
+            if (_hwnd == IntPtr.Zero) return;
+            Native.SetForegroundWindow(_hwnd);
+            Native.PostMessage(_hwnd, Native.WM_NULL, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+}

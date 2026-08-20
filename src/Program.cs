@@ -1,0 +1,82 @@
+using System;
+using System.Net;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+
+namespace Vibespan
+{
+    public static class Program
+    {
+        static Mutex _single;
+        static Tray _tray;
+        static TopmostWatcher _watcher;
+
+        [STAThread]
+        public static int Main(string[] argv)
+        {
+            // Statusline mode: Claude Code runs the same executable per turn, pipes it JSON and
+            // renders whatever it prints. Must not touch the UI or the single-instance mutex.
+            if (argv.Length > 0 && argv[0] == "--feed")
+                return Feed.RunAsStatusLine();
+
+            // --demo <file>: render a fixture instead of calling the endpoint.
+            for (int i = 0; i < argv.Length - 1; i++)
+                if (argv[i] == "--demo") Api.DemoFile = argv[i + 1];
+
+            // A named mutex, not "kill anything with my process name". Killing the previous
+            // instance leaves its tray icon behind as a ghost until someone hovers over it.
+            bool created;
+            _single = new Mutex(true, "Local\\VibespanSingleInstance", out created);
+            if (!created)
+            {
+                Log.Write("another instance is already running; exiting");
+                return 0;
+            }
+
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            AppDomain.CurrentDomain.UnhandledException += delegate (object s, UnhandledExceptionEventArgs e)
+            {
+                Exception ex = e.ExceptionObject as Exception;
+                Log.Write("FATAL: " + (ex != null ? ex.ToString() : "unknown"));
+            };
+
+            Cfg cfg = Cfg.Load();
+            var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+            var win = new WidgetWindow(cfg);
+
+            MenuBuilder builder = new MenuBuilder(win);
+            _tray = new Tray(win, delegate { return builder.Build(); });
+
+            Action rebuild = delegate
+            {
+                try { win.RootBorder.ContextMenu = builder.Build(); }
+                catch (Exception e) { Log.Write("menu rebuild failed: " + e.Message); }
+            };
+            win.MenuNeedsRebuild += rebuild;
+            win.SnapshotUpdated += delegate (Snapshot s) { if (_tray != null) _tray.Update(s, win.Config); };
+
+            win.Loaded += delegate
+            {
+                rebuild();
+                _tray.Start();
+                _watcher = new TopmostWatcher(win);
+                _watcher.Start();
+            };
+
+            try
+            {
+                app.MainWindow = win;
+                win.Show();
+                return app.Run();
+            }
+            finally
+            {
+                // A tray icon outlives a crashed process, so tear it down on every exit path.
+                if (_watcher != null) _watcher.Dispose();
+                if (_tray != null) _tray.Dispose();
+                try { _single.ReleaseMutex(); } catch { }
+            }
+        }
+    }
+}
