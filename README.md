@@ -4,7 +4,7 @@ A small always-on-top gauge for Windows showing how much of your Claude usage li
 have burned through, and when they reset — with everything about it configurable from one
 right-click.
 
-<img src="docs/shot-first-run.png" alt="The widget showing a 39% five-hour session and 23% weekly usage" width="300">
+<img src="docs/shot-installed.png" alt="The widget showing a 48% five-hour session and 24% weekly usage" width="300">
 
 It sits above the taskbar and never disappears behind it, because the executable is built
 with the `uiAccess` privilege — the same one the Magnifier and the on-screen keyboard use.

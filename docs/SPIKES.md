@@ -159,6 +159,36 @@ its keep for the case where the flag is granted but something else is wrong.
 
 ---
 
+## Install verification (real install, not a spike)
+
+Measured after `Installer.ps1` ran elevated on this machine.
+
+```
+uiAccess granted           yes          (logged at startup by the app's own self-check)
+signature                  Valid, timestamped
+Cert:\LocalMachine\My      absent       <-- private key destroyed after signing
+Cert:\LocalMachine\Root    present, privateKey=False
+integrity level            High         (inherent: a uiAccess process launched by a member
+                                        of Administrators runs High IL - documented, and
+                                        confirmed here by a medium-IL shell being denied
+                                        both Stop-Process and Win32_Process queries on it)
+files written by the app   owner = RZR-PC-SF\dj_el   <-- NOT BUILTIN\Administrators
+```
+
+That last line is the one that matters. The predecessor was launched directly from its
+elevated installer, inherited a full admin token, and left `~/.claude/.credentials.json`
+owned by `BUILTIN\Administrators`. Launching via `explorer.exe` hands the widget the
+logged-on user's own token instead: it still gets High integrity from uiAccess, but its
+default token owner is the user, so everything it writes stays user-owned.
+
+A side effect worth knowing while testing: once uiAccess is granted, **synthetic input from
+a medium-integrity process no longer reaches the widget**. UIPI only lets a uiAccess process
+drive a higher-integrity UI. Scripted click/drag tests work against a `-NoUiAccess` build and
+silently do nothing against an installed one - which looks exactly like a broken feature if
+you do not know why.
+
+---
+
 ## Testing notes
 
 Two mistakes cost a re-run each and are worth remembering:
