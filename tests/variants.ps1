@@ -37,7 +37,7 @@ function Base-Config {
     }
     [ordered]@{
         schemaVersion = 1
-        window = [ordered]@{ x = 60; y = 200; scale = 1.0; contentOpacity = 1.0
+        window = [ordered]@{ x = 260; y = 300; scale = 1.0; contentOpacity = 1.0
                              backgroundAlpha = 0.95; orientation = 'horizontal'
                              clickThrough = $false; hideFullScreen = $false
                              showLogo = $true; showBorder = $true }
@@ -78,6 +78,19 @@ $variants = @(
             $c.rows[0].accent = '#56B4E9'; $c.rows[1].accent = '#C77DFF' } }
 )
 
+# ---- black backdrop -------------------------------------------------------
+# The widget is translucent, so the desktop composites into every captured
+# pixel. Put something blank behind it before capturing anything.
+$backdrop = Start-Process powershell -PassThru -WindowStyle Hidden -ArgumentList @(
+    '-NoProfile','-ExecutionPolicy','Bypass','-File',
+    (Join-Path $PSScriptRoot 'backdrop.ps1'))
+Start-Sleep -Milliseconds 900
+function Stop-Backdrop {
+    if ($script:backdrop -and -not $script:backdrop.HasExited) {
+        try { $script:backdrop.Kill() } catch { }
+    }
+}
+
 $shots = @()
 foreach ($v in $variants) {
     Stop-Widget
@@ -105,6 +118,7 @@ foreach ($v in $variants) {
     Write-Host ("  {0,-40} {1} x {2}" -f $v.name, $w, $ht)
 }
 Stop-Widget
+Stop-Backdrop
 
 # ---- contact sheet ----
 $pad = 14; $labelW = 250; $gap = 10
