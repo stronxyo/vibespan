@@ -1,4 +1,4 @@
-# Build output (the installer compiles into %TEMP%, but just in case)
+# Build output. The installer compiles into %TEMP%, but spikes and tests build in place.
 *.exe
 *.dll
 *.pdb
@@ -10,12 +10,13 @@ obj/
 *.pfx
 *.snk
 
-# Spike artefacts
+# Spike run artefacts (the .cs files are the deliverable, the reports are regenerated)
 spikes/report*.txt
 
-# Local runtime state
-log.txt
-settings.json
-feed.json
-tokens.json
+# Never commit credentials, under any name.
 *.credentials.json
+
+# NOTE: no rules for settings.json / log.txt / tokens.json / feed.json here. Those are
+# runtime files and they live in %LOCALAPPDATA%\Vibespan, never in the repository - a
+# blanket rule for them only hides legitimate files, which is exactly what happened to
+# tests/fixtures/feed.json.
