@@ -257,6 +257,14 @@ Everything lives in `src\I18n.cs`. Copy one of the blocks, translate the values,
 it to `Catalog`. The language menu and the settings file are both driven by that array, so
 there is nothing else to wire up.
 
+## A note on the Claude mark
+
+The `asterisk` mark draws Anthropic's actual Claude glyph, used to identify the service this
+widget reports on. Vibespan is not affiliated with, endorsed by, or sponsored by Anthropic.
+If you would rather not ship a third-party trademark, `Appearance ▸ Mark` offers `rail`,
+`dot` and `none` — and `rail` is the default precisely because the mark is theirs, not this
+project's.
+
 ## Credits
 
 Vibespan began as a rewrite of [Defacedz/claude-usage-widget](https://github.com/Defacedz/claude-usage-widget)

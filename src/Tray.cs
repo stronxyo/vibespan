@@ -13,7 +13,6 @@
 // programmatically opened WPF popup on a non-foreground window never dismisses.
 using System;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 // Both namespaces define ContextMenu; this file needs the WPF one (see the header note
 // about why the WinForms ContextMenuStrip is unusable here).
@@ -133,31 +132,15 @@ namespace Vibespan
         {
             try
             {
-                System.Windows.Media.Color c = Theme.C(tintHex ?? "#DA7756");
-                using (var bmp = new Bitmap(16, 16))
-                {
-                    using (Graphics g = Graphics.FromImage(bmp))
-                    {
-                        g.SmoothingMode = SmoothingMode.AntiAlias;
-                        g.Clear(Color.Transparent);
-                        using (var brush = new SolidBrush(Color.FromArgb(255, c.R, c.G, c.B)))
-                        {
-                            // Same 12-spoke asterisk the widget draws, at tray size.
-                            double[] lens = { 0.50, 0.41, 0.47, 0.42, 0.50, 0.43, 0.46, 0.40, 0.49, 0.42, 0.47, 0.41 };
-                            double half = 9.0 * Math.PI / 180, cx = 8, cy = 8;
-                            for (int i = 0; i < 12; i++)
-                            {
-                                double a = i * 30 * Math.PI / 180;
-                                double r = 16 * lens[i];
-                                var pts = new PointF[3];
-                                pts[0] = new PointF((float)cx, (float)cy);
-                                pts[1] = new PointF((float)(cx + r * Math.Cos(a - half)), (float)(cy + r * Math.Sin(a - half)));
-                                pts[2] = new PointF((float)(cx + r * Math.Cos(a + half)), (float)(cy + r * Math.Sin(a + half)));
-                                g.FillPolygon(brush, pts);
-                            }
-                        }
-                    }
+                var brush = new System.Windows.Media.SolidColorBrush(Theme.C(tintHex ?? "#DA7756"));
+                brush.Freeze();
 
+                // Same vector glyph the widget draws, rendered by WPF and handed to the shell
+                // as a bitmap. Re-drawing it with GDI+ would mean maintaining the mark twice.
+                byte[] png = Gauge.MarkPng(16, brush);
+                using (var ms = new System.IO.MemoryStream(png))
+                using (var bmp = new Bitmap(ms))
+                {
                     IntPtr h = bmp.GetHicon();
                     Icon fresh = Icon.FromHandle(h);
                     Icon old = _icon.Icon;
