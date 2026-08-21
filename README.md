@@ -273,7 +273,9 @@ project's.
 
 ## Credits
 
-Vibespan began as a rewrite of [Defacedz/claude-usage-widget](https://github.com/Defacedz/claude-usage-widget)
+Vibespan is by [**stronxyo**](https://github.com/stronxyo).
+
+It began as a rewrite of [Defacedz/claude-usage-widget](https://github.com/Defacedz/claude-usage-widget)
 and keeps several things that project got right the hard way — the `uiAccess` approach, the
 in-place credential write-back, the borderless-fullscreen detection, and the idea that a
 stale gauge should *look* stale. MIT, with the original copyright retained.
