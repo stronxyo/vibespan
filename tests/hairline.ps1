@@ -58,6 +58,12 @@ function Run($edge, $thick, $visible) {
     @{ L=$r.L; T=$r.T; W=($r.Rt-$r.L); H=($r.B-$r.T) }
 }
 
+# Blank backdrop: the strip is translucent, so whatever is on the desktop composites into
+# every pixel this test reads.
+$backdrop = Start-Process powershell -PassThru -WindowStyle Hidden -ArgumentList @(
+    '-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'backdrop.ps1'))
+Start-Sleep -Milliseconds 900
+
 $fail = 0
 function Check($cond, $msg) {
     if ($cond) { Write-Host "     ok   $msg" }
@@ -88,6 +94,34 @@ foreach ($case in @(
     }
 }
 
+# ---- fill proportion ----
+# Geometry passing is not enough: the strip was once the right size on screen while the
+# fill inside it rendered 4% for a 61% reading, because the width came from a SizeChanged
+# handler that did not fire after the window was widened. Measure the actual pixels.
+Write-Host "`n-- fill proportion (fixture: session 88%, weekly 96.5%) --"
+$m = Run 'bottom' 6 2
+if ($m) {
+    $b = New-Object System.Drawing.Bitmap $m.W, $m.H
+    $g = [System.Drawing.Graphics]::FromImage($b)
+    $g.CopyFromScreen($m.L, $m.T, 0, 0, (New-Object System.Drawing.Size $m.W, $m.H)); $g.Dispose()
+    foreach ($lane in @(@{y=2; want=96.5; name='outer lane'}, @{y=9; want=88.0; name='inner lane'})) {
+        if ($lane.y -ge $m.H) { continue }
+        # Walk the CONTIGUOUS run from x=0, not the last bright pixel anywhere on the row.
+        # The strip is translucent, so a bright window edge behind it reads as "fill" and
+        # inflates the measurement - 96.5% once measured as 99.7% because of a grey pixel
+        # near the screen edge showing through.
+        $last = -1
+        for ($x = 0; $x -lt $m.W; $x++) {
+            $c = $b.GetPixel($x, $lane.y)
+            if (($c.R + $c.G + $c.B) -gt 200) { $last = $x } else { break }
+        }
+        $pct = [math]::Round(($last + 1) / $m.W * 100, 1)
+        $ok = [math]::Abs($pct - $lane.want) -le 1.5
+        Check $ok ("{0}: fill {1}% (expected ~{2}%)" -f $lane.name, $pct, $lane.want)
+    }
+    $b.Dispose()
+} else { Write-Host '     FAIL could not measure fill'; $fail++ }
+
 # a picture of the most useful case
 $m = Run 'bottom' 3 2
 if ($m) {
@@ -101,6 +135,7 @@ if ($m) {
 }
 Get-Process Vibespan -EA SilentlyContinue |
     Where-Object { $_.Path -like "$env:TEMP*" } | Stop-Process -Force -EA SilentlyContinue
+if (-not $backdrop.HasExited) { $backdrop.Kill() }
 
 if ($fail -eq 0) { Write-Host "`nPASS" -ForegroundColor Green }
 else { Write-Host "`n$fail FAILURE(S)" -ForegroundColor Red; exit 1 }

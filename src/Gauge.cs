@@ -490,6 +490,13 @@ namespace Vibespan
                 double pct = r.Invert ? 100 - b.Percent : b.Percent;
                 Brush fill = r.Accent != null ? Theme.B(r.Accent) : Theme.PercentBrush(cfg, b.Percent, b.Severity);
 
+                // Proportion is expressed as star-weighted grid tracks, NOT computed in a
+                // SizeChanged handler. The handler version was wrong: the window is widened to
+                // the monitor by SetWindowPos AFTER the content is built, and when no further
+                // SizeChanged arrived the bar kept a width measured against the pre-resize
+                // layout - a 61% reading rendered as 4%. Star sizing is resolved by layout at
+                // whatever size the strip ends up, so it cannot drift out of sync.
+                double p = Math.Max(0, Math.Min(100, pct));
                 var lane = new Grid();
                 if (vertical) { lane.Width = t; lane.HorizontalAlignment = HorizontalAlignment.Stretch; }
                 else { lane.Height = t; lane.VerticalAlignment = VerticalAlignment.Stretch; }
@@ -498,26 +505,23 @@ namespace Vibespan
                 lane.Children.Add(track);
 
                 var bar = new Border { Background = fill };
+                if (p > 0) { if (vertical) bar.MinHeight = 2; else bar.MinWidth = 2; }
+
                 if (vertical)
                 {
-                    bar.VerticalAlignment = VerticalAlignment.Bottom;   // a level fills upward
-                    bar.HorizontalAlignment = HorizontalAlignment.Stretch;
+                    // A level fills upward, so the empty share is the top row.
+                    lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100 - p, GridUnitType.Star) });
+                    lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(p, GridUnitType.Star) });
+                    Grid.SetRowSpan(track, 2);
+                    Grid.SetRow(bar, 1);
                 }
                 else
                 {
-                    bar.HorizontalAlignment = HorizontalAlignment.Left;
-                    bar.VerticalAlignment = VerticalAlignment.Stretch;
+                    lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(p, GridUnitType.Star) });
+                    lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100 - p, GridUnitType.Star) });
+                    Grid.SetColumnSpan(track, 2);
+                    Grid.SetColumn(bar, 0);
                 }
-                // Proportion is resolved at layout time against whatever the edge measures,
-                // so the line stays correct across monitors of different widths.
-                bar.Tag = pct;
-                lane.SizeChanged += delegate (object sender, SizeChangedEventArgs e)
-                {
-                    var g = (Grid)sender;
-                    double frac = Math.Max(0, Math.Min(100, (double)bar.Tag)) / 100.0;
-                    if (vertical) bar.Height = Math.Max(frac > 0 ? 2 : 0, g.ActualHeight * frac);
-                    else bar.Width = Math.Max(frac > 0 ? 2 : 0, g.ActualWidth * frac);
-                };
                 lane.Children.Add(bar);
                 host.Children.Add(lane);
             }

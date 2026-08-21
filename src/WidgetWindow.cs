@@ -48,6 +48,7 @@ namespace Vibespan
         string _lastError;
         DateTime _lastOk = DateTime.MinValue;
         bool _hiddenForFullScreen;
+        bool _positionSettled;
 
         DispatcherTimer _poll, _tick, _feedWatch;
         int _currentIntervalSeconds;
@@ -160,6 +161,13 @@ namespace Vibespan
                 _slot.HorizontalAlignment = HorizontalAlignment.Stretch;
                 _slot.VerticalAlignment = VerticalAlignment.Stretch;
 
+                // Neutralise the zoom. The strip's size is already computed in device pixels,
+                // with thickness multiplied by Scale explicitly - leaving the LayoutTransform
+                // on would scale the pinned width too, so a widget previously resized to 1.55x
+                // produced a 2978px line on a 1920px monitor, hanging a thousand pixels off
+                // the side of the screen.
+                _scale.ScaleX = 1.0; _scale.ScaleY = 1.0;
+
                 Opacity = Config.ContentOpacity;
                 TextOptions.SetTextFormattingMode(_root, TextFormattingMode.Ideal);
                 return;
@@ -167,6 +175,7 @@ namespace Vibespan
 
             _root.BorderThickness = new Thickness(1);
             _grip.Visibility = Visibility.Visible;
+            _scale.ScaleX = Config.Scale; _scale.ScaleY = Config.Scale;
             _shell.ColumnDefinitions[1].Width = GridLength.Auto;
             _slot.HorizontalAlignment = HorizontalAlignment.Stretch;
             _slot.VerticalAlignment = VerticalAlignment.Center;
@@ -236,6 +245,11 @@ namespace Vibespan
             _tick.Tick += delegate { if (_snap != null) Redraw(); };
             _tick.Start();
 
+
+            // The last position is written on drag, but a session that never drags would
+            // otherwise lose a position set some other way. Persist on the way out too.
+            Closing += delegate { try { if (!Config.IsHairline) SavePosition(); } catch { } };
+
             _feedWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _feedWatch.Tick += delegate { PollFeedFile(); };
             _feedWatch.Start();
@@ -291,6 +305,28 @@ namespace Vibespan
         /// Everything here is physical pixels: WPF's Left/Top are converted using the CURRENT
         /// monitor's scale factor, which makes them unreliable across a multi-monitor desktop.
         /// </summary>
+        /// <summary>
+        /// Move to a point in physical desktop pixels, telling BOTH WPF and the window manager.
+        ///
+        /// SetWindowPos alone is not enough. WPF keeps its own Left/Top, and the SizeToContent
+        /// resize that follows the first render repositions the window from those stale values -
+        /// which silently undid every restore and left the widget at WPF's default placement.
+        /// Assigning Left/Top makes WPF authoritative so the resize grows from the right corner.
+        /// </summary>
+        void MoveTo(int deviceX, int deviceY)
+        {
+            double dx = deviceX, dy = deviceY;
+            var src = PresentationSource.FromVisual(this) as HwndSource;
+            if (src != null && src.CompositionTarget != null)
+            {
+                Point p = src.CompositionTarget.TransformFromDevice.Transform(new Point(deviceX, deviceY));
+                dx = p.X; dy = p.Y;
+            }
+            Left = dx; Top = dy;
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, deviceX, deviceY, 0, 0,
+                                Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        }
+
         public void ApplyPosition()
         {
             if (Config.IsHairline) { ApplyHairlineGeometry(); return; }
@@ -298,26 +334,52 @@ namespace Vibespan
             Native.RECT r; CurrentRect(out r);
             int w = r.Width > 0 ? r.Width : 200, h = r.Height > 0 ? r.Height : 44;
 
-            if (!double.IsNaN(Config.X) && !double.IsNaN(Config.Y) &&
-                RectIsVisible((int)Config.X, (int)Config.Y, w, h))
+            if (!double.IsNaN(Config.X) && !double.IsNaN(Config.Y))
             {
-                Native.SetWindowPos(_hwnd, IntPtr.Zero, (int)Config.X, (int)Config.Y, 0, 0,
-                                    Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
-                return;
+                int x = (int)Config.X, y = (int)Config.Y;
+
+                // Prefer the monitor it was actually left on. Coordinates alone are ambiguous
+                // after a display rearrangement: the same point can land on a different screen,
+                // or on none. If that monitor is still attached, keep the widget on it.
+                System.Windows.Forms.Screen saved = null;
+                if (!string.IsNullOrEmpty(Config.Monitor))
+                {
+                    foreach (System.Windows.Forms.Screen sc in System.Windows.Forms.Screen.AllScreens)
+                        if (sc.DeviceName == Config.Monitor) { saved = sc; break; }
+                }
+                if (saved != null)
+                {
+                    // Nudge back inside if the resolution shrank while it was away.
+                    System.Drawing.Rectangle b = saved.Bounds;
+                    if (x + w > b.Right) x = b.Right - w;
+                    if (y + h > b.Bottom) y = b.Bottom - h;
+                    if (x < b.Left) x = b.Left;
+                    if (y < b.Top) y = b.Top;
+                    MoveTo(x, y);
+                    return;
+                }
+                if (RectIsVisible(x, y, w, h)) { MoveTo(x, y); return; }
             }
 
             MoveToDefaultCorner();
         }
 
         /// <summary>
-        /// Lay the window flat against one edge of the monitor it currently sits on. Sizing is
-        /// explicit here rather than SizeToContent - the strip must match the display, not the
-        /// content - so SizeToContent is turned off for the duration of hairline mode.
+        /// Lay the window flat against one edge of the monitor it sits on.
+        ///
+        /// The strip's size is pinned on the CONTENT and SizeToContent sizes the window to it -
+        /// the same direction of control the widget mode already uses. Driving it the other way
+        /// does not work: with SizeToContent=Manual, an assigned Window.Width of 1920 left
+        /// ActualWidth reporting 136, so the content went on being laid out against the old
+        /// widget-sized slot, star-sized lanes divided up 136px, and a 61% reading drew as 4%.
+        /// SetWindowPos moves the window afterwards; it never sizes it.
+        ///
+        /// The bug only surfaced with a single visible metric: with two, the strip's height
+        /// changes between layout passes and the resulting resize resynchronised things by luck.
         /// </summary>
         void ApplyHairlineGeometry()
         {
             if (_hwnd == IntPtr.Zero) return;
-            SizeToContent = SizeToContent.Manual;
 
             System.Drawing.Rectangle b = TargetScreenBounds();
             int rows = VisibleRowCount();
@@ -332,7 +394,24 @@ namespace Vibespan
                 case "right": x = b.Right - thick;  y = b.Top;            w = thick;   h = b.Height; break;
                 default:      x = b.Left;           y = b.Bottom - thick; w = b.Width; h = thick;    break;
             }
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, w, h, Native.SWP_NOACTIVATE);
+
+            // Device pixels -> DIPs, so the strip still matches the monitor above 100% scaling.
+            double dipW = w, dipH = h;
+            var src = PresentationSource.FromVisual(this) as HwndSource;
+            if (src != null && src.CompositionTarget != null)
+            {
+                Matrix toDip = src.CompositionTarget.TransformFromDevice;
+                Point size = toDip.Transform(new Point(w, h));
+                dipW = size.X; dipH = size.Y;
+            }
+
+            SizeToContent = SizeToContent.WidthAndHeight;
+            _root.Width = dipW;
+            _root.Height = dipH;
+            _root.UpdateLayout();
+
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0,
+                                Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
         }
 
         int VisibleRowCount()
@@ -376,6 +455,10 @@ namespace Vibespan
             }
             else
             {
+                // Release the pin hairline mode put on the content, or the box stays
+                // strip-shaped.
+                _root.Width = double.NaN;
+                _root.Height = double.NaN;
                 SizeToContent = SizeToContent.WidthAndHeight;
                 ApplyTheme();
                 Redraw();
@@ -391,8 +474,7 @@ namespace Vibespan
             Native.RECT r; CurrentRect(out r);
             int w = r.Width > 0 ? r.Width : 200, h = r.Height > 0 ? r.Height : 44;
             System.Drawing.Rectangle wa = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
-            int x = wa.Left + 8, y = wa.Bottom - h - 4;
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            MoveTo(wa.Left + 8, wa.Bottom - h - 4);
             SavePosition();
         }
 
@@ -402,8 +484,7 @@ namespace Vibespan
             UpdateLayout();
             Native.RECT r; CurrentRect(out r);
             System.Drawing.Rectangle wa = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
-            int x = wa.Left + (wa.Width - r.Width) / 2, y = wa.Top + (wa.Height - r.Height) / 2;
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            MoveTo(wa.Left + (wa.Width - r.Width) / 2, wa.Top + (wa.Height - r.Height) / 2);
             Visibility = Visibility.Visible;
             _hiddenForFullScreen = false;
             SavePosition();
@@ -489,6 +570,14 @@ namespace Vibespan
         /// </summary>
         public void SetScale(double s)
         {
+            // In hairline mode Scale drives the line's thickness, not a zoom of the content.
+            if (Config.IsHairline)
+            {
+                Config.Scale = s;
+                ApplyHairlineGeometry();
+                return;
+            }
+
             Native.RECT before; CurrentRect(out before);
             Native.RECT mon;
             bool haveMon = Native.TryMonitorRect(_hwnd, out mon);
@@ -712,7 +801,17 @@ namespace Vibespan
 
             // The strip's thickness is a function of how many metrics are visible, so ticking a
             // row on or off has to resize the window, not just repaint it.
-            if (Config.IsHairline) ApplyHairlineGeometry();
+            if (Config.IsHairline) { ApplyHairlineGeometry(); return; }
+
+            // Re-apply the saved position once, after the first render with real data. The
+            // first ApplyPosition runs against a placeholder whose height is not the final one,
+            // so a bottom-anchored default corner would sit a few pixels off.
+            if (!_positionSettled && _snap != null && _hwnd != IntPtr.Zero)
+            {
+                _positionSettled = true;
+                UpdateLayout();
+                ApplyPosition();
+            }
         }
 
         /// <summary>Full rebuild after a settings change.</summary>

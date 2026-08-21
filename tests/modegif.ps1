@@ -26,9 +26,11 @@ New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
 if (Test-Path $frames) { Remove-Item -LiteralPath $frames -Recurse -Force }
 New-Item -ItemType Directory -Path $frames -Force | Out-Null
 
-# A quiet reading, so the bar shows a fill and a track rather than a full bar.
+# 61%: enough fill that the hairline reads as a line rather than a stub, while still
+# leaving visible track so the encoding is legible. Below the 70% warn stop, so it keeps
+# the calm accent colour rather than going amber.
 @'
-{"five_hour":{"utilization":14.0,"resets_at":"2026-12-31T20:00:00+00:00"},
+{"five_hour":{"utilization":61.0,"resets_at":"2026-12-31T20:00:00+00:00"},
  "seven_day":{"utilization":31.0,"resets_at":"2027-01-04T00:00:00+00:00"}}
 '@ | Out-File $Fixture -Encoding utf8
 
@@ -110,7 +112,7 @@ $k = $target / $card.Width
 $cw = [int]($card.Width  * $k)
 $ch = [int]($card.Height * $k)
 $cardRect = New-Object System.Drawing.RectangleF ([single](($CanvasW-$cw)/2)), ([single](($CanvasH-$ch)/2 + 8)), ([single]$cw), ([single]$ch)
-$lineH = 3
+$lineH = 4
 $lineRect = New-Object System.Drawing.RectangleF 0, 0, ([single]$CanvasW), ([single]$lineH)
 
 function Ease([double]$t) { if ($t -lt 0.5) { return 4*$t*$t*$t } else { $f = -2*$t+2; return 1 - ($f*$f*$f)/2 } }
