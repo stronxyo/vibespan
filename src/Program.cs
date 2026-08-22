@@ -12,6 +12,19 @@ namespace Vibespan
         static Tray _tray;
         static TopmostWatcher _watcher;
 
+        /// <summary>Identity of the row set, so the menu is rebuilt on change and not on every poll.</summary>
+        static string BucketKeys(Snapshot s)
+        {
+            if (s == null || s.Buckets == null) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (Bucket b in s.Buckets)
+            {
+                if (!b.HasPercent) continue;
+                sb.Append(b.Key).Append(b.IsActive ? "*" : "").Append('|');
+            }
+            return sb.ToString();
+        }
+
         [STAThread]
         public static int Main(string[] argv)
         {
@@ -67,7 +80,27 @@ namespace Vibespan
                 catch (Exception e) { Log.Write("menu rebuild failed: " + e.Message); }
             };
             win.MenuNeedsRebuild += rebuild;
-            win.SnapshotUpdated += delegate (Snapshot s) { if (_tray != null) _tray.Update(s, win.Config); };
+            // The menu lists one entry per discovered bucket, so it cannot be built correctly
+            // until data arrives - and it was only ever built at Loaded, when the snapshot is
+            // still null. That is why Metrics sat on "loading..." forever: the placeholder was
+            // cached and nothing asked for it again. Rebuild when the bucket set actually
+            // changes, which is once per session in practice, not on every poll.
+            string lastKeys = null;
+            win.SnapshotUpdated += delegate (Snapshot s)
+            {
+                if (_tray != null) _tray.Update(s, win.Config);
+
+                string keys = BucketKeys(s);
+                if (keys == lastKeys) return;
+
+                // Never swap the menu out from under an open one. lastKeys stays unchanged so
+                // the next snapshot retries.
+                ContextMenu open = win.RootBorder != null ? win.RootBorder.ContextMenu : null;
+                if (open != null && open.IsOpen) return;
+
+                lastKeys = keys;
+                rebuild();
+            };
 
             win.Loaded += delegate
             {

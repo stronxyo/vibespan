@@ -54,7 +54,7 @@ namespace Vibespan
                 {
                     Text = selected ? "●" : "",
                     FontSize = 9,
-                    Foreground = Brushes.Gray,
+                    Foreground = MenuTheme.RadioDot,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 }
@@ -92,6 +92,7 @@ namespace Vibespan
         public ContextMenu Build()
         {
             var m = new ContextMenu();
+            MenuTheme.Apply(m);
 
             m.Items.Add(Item(L.MenuRefresh, delegate { _win.Refresh(); }));
             m.Items.Add(new Separator());
