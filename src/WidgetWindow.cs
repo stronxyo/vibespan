@@ -616,27 +616,38 @@ namespace Vibespan
         {
             if (_hwnd == IntPtr.Zero) return;
 
-            // Only hide for a full-screen app sharing OUR display. A game on the laptop panel
-            // is no reason to blank a widget parked on the second monitor - the earlier version
-            // hid unconditionally, which made the widget vanish for no visible cause.
-            bool hide = Config.HideFullScreen && FullScreenAppOnOurMonitor();
+            bool onOurMonitor;
+            bool fullScreen = FullScreenApp(out onOurMonitor);
+
+            // Visibility and Z-order are two different questions and they do NOT have the same
+            // answer. Hiding is about what the user can see, so it is per-monitor: a game on the
+            // other display is no reason to blank a widget parked over here.
+            bool hide = Config.HideFullScreen && fullScreen && onOurMonitor;
             if (hide != _hiddenForFullScreen)
             {
                 _hiddenForFullScreen = hide;
                 Visibility = hide ? Visibility.Hidden : Visibility.Visible;
             }
-            // Re-asserting topmost over a full-screen game can kick it out of its display mode
-            // or stutter it, so while hidden we stop touching the Z-order entirely. On a
-            // different display we are not over it, so normal operation continues.
-            if (hide) return;
+
+            // Z-order is not per-monitor - it is one desktop-wide band - so the monitor test must
+            // not gate it. Suppressing the re-assert only while HIDDEN meant a full-screen game on
+            // the second monitor left this running every 3 seconds, and each pass demoted and
+            // re-promoted a uiAccess window across the whole desktop. That is what froze the game:
+            // the process stayed alive while its presentation deadlocked on the occlusion change.
+            if (fullScreen) return;
+
             Native.ReassertTopmost(_hwnd);
         }
 
         /// <summary>
-        /// True only when a full-screen application occupies the same monitor as the widget.
+        /// True when a full-screen application is running, on ANY monitor.
+        /// <paramref name="onOurMonitor"/> reports separately whether it shares the widget's
+        /// display, because that answers the hide question while this answers the Z-order one.
         /// </summary>
-        bool FullScreenAppOnOurMonitor()
+        bool FullScreenApp(out bool onOurMonitor)
         {
+            onOurMonitor = false;
+
             IntPtr fg = Native.GetForegroundWindow();
             if (fg == IntPtr.Zero || fg == _hwnd) return false;
 
@@ -645,30 +656,35 @@ namespace Vibespan
             if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" ||
                 cls == "Shell_SecondaryTrayWnd" || cls == "Windows.UI.Core.CoreWindow") return false;
 
+            // rcMonitor, not rcWork: a merely maximized window stops at the taskbar and must
+            // not count. This is the check that catches borderless full screen, which
+            // SHQueryUserNotificationState misses.
+            bool covers = false;
+            Native.RECT r, mon;
+            if (Native.GetWindowRect(fg, out r) && Native.TryMonitorRect(fg, out mon))
+                covers = r.Left <= mon.Left && r.Top <= mon.Top &&
+                         r.Right >= mon.Right && r.Bottom >= mon.Bottom;
+
+            if (!covers && !D3DFullScreenActive()) return false;
+
             // Compare monitor handles, not rectangles: two displays can share coordinates in
             // odd multi-monitor arrangements, and the handle is what Windows itself keys on.
             IntPtr fgMon = Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST);
             IntPtr myMon = Native.MonitorFromWindow(_hwnd, Native.MONITOR_DEFAULTTONEAREST);
-            if (fgMon == IntPtr.Zero || myMon == IntPtr.Zero) return false;
-            if (fgMon != myMon) return false;          // their screen, not ours
+            onOurMonitor = fgMon != IntPtr.Zero && fgMon == myMon;
+            return true;
+        }
 
-            Native.RECT r;
-            if (!Native.GetWindowRect(fg, out r)) return false;
-            Native.RECT mon;
-            if (!Native.TryMonitorRect(fg, out mon)) return false;
-
-            // rcMonitor, not rcWork: a merely maximized window stops at the taskbar and must
-            // not count. This is the check that catches borderless fullscreen, which is what
-            // SHQueryUserNotificationState misses.
-            bool covers = r.Left <= mon.Left && r.Top <= mon.Top && r.Right >= mon.Right && r.Bottom >= mon.Bottom;
-            if (covers) return true;
-
-            // Exclusive-mode D3D. This signal is system-wide with no monitor attached, so it is
-            // only trusted once the foreground window has already been confirmed to be ours.
+        /// <summary>
+        /// Exclusive-mode D3D / presentation. The signal is system-wide with no monitor attached,
+        /// so it can establish THAT a game is running but never WHERE.
+        /// </summary>
+        static bool D3DFullScreenActive()
+        {
             int state;
-            if (Native.SHQueryUserNotificationState(out state) == 0)
-                return state == Native.QUNS_RUNNING_D3D_FULL_SCREEN || state == Native.QUNS_PRESENTATION_MODE;
-            return false;
+            if (Native.SHQueryUserNotificationState(out state) != 0) return false;
+            return state == Native.QUNS_RUNNING_D3D_FULL_SCREEN ||
+                   state == Native.QUNS_PRESENTATION_MODE;
         }
 
         // ---------- data ----------

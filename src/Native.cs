@@ -83,6 +83,7 @@ namespace Vibespan
         // ---------- constants ----------
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        public const int WS_EX_TOPMOST = 0x00000008;
         public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
         public const uint SWP_TOPMOST_FLAGS = SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE;
 
@@ -127,7 +128,20 @@ namespace Vibespan
             SetWindowPos(h, on ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_TOPMOST_FLAGS);
         }
 
-        /// <summary>Kick the window back to the top of its band. Cheap; safe to repeat.</summary>
+        /// <summary>True while the window still carries the topmost bit.</summary>
+        public static bool IsTopmost(IntPtr h)
+        {
+            return (GetWindowLong(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+        }
+
+        /// <summary>
+        /// Kick the window back to the top of its band.
+        ///
+        /// NOT cheap, and not safe to repeat blindly - the earlier comment here said otherwise
+        /// and that was the bug. Each call rewrites the DESKTOP-WIDE topmost band and hands DWM
+        /// an occlusion change; a game presenting full screen can deadlock on it. Callers must
+        /// establish that no full-screen application is running first, on ANY monitor.
+        /// </summary>
         public static void ReassertTopmost(IntPtr h)
         {
             SetWindowPos(h, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_TOPMOST_FLAGS);
