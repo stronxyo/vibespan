@@ -594,7 +594,7 @@ namespace Vibespan
             {
                 C.HideFullScreen = on;
                 Changed(false);
-                _win.EvaluateTopmost();
+                _win.EvaluateTopmost(true);
             }));
             m.Items.Add(Toggle(L.MenuClickThrough, C.ClickThrough, delegate (bool on)
             {

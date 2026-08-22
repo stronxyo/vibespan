@@ -48,14 +48,14 @@ namespace Vibespan
             _coalesce.Tick += delegate
             {
                 _coalesce.Stop();
-                Evaluate();
+                Evaluate(true);          // a real foreground change: repair Z-order if needed
             };
 
             _fallback = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-            _fallback.Tick += delegate { Evaluate(); };
+            _fallback.Tick += delegate { Evaluate(false); };   // heartbeat: read-only
             _fallback.Start();
 
-            Evaluate();
+            Evaluate(true);
         }
 
         // Out-of-context events are delivered on the thread that installed the hook, so this is
@@ -71,9 +71,9 @@ namespace Vibespan
             catch { }
         }
 
-        void Evaluate()
+        void Evaluate(bool mayRestack)
         {
-            try { _win.EvaluateTopmost(); }
+            try { _win.EvaluateTopmost(mayRestack); }
             catch (Exception e) { Log.Write("topmost evaluate failed: " + e.Message); }
         }
 

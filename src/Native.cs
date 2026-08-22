@@ -85,7 +85,13 @@ namespace Vibespan
         public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
         public const int WS_EX_TOPMOST = 0x00000008;
         public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
+        public const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_TOPMOST_FLAGS = SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE;
+
+        // Moving is not restacking. Passing IntPtr.Zero as hWndInsertAfter means HWND_TOP, so
+        // without SWP_NOZORDER every reposition also rewrites the band - a side effect none of
+        // the move paths ever wanted, and one more chance to disturb whatever is presenting.
+        public const uint SWP_MOVE_ONLY = SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER;
 
         public const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
         public const int WS_EX_TOOLWINDOW = 0x00000080;

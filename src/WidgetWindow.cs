@@ -323,8 +323,7 @@ namespace Vibespan
                 dx = p.X; dy = p.Y;
             }
             Left = dx; Top = dy;
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, deviceX, deviceY, 0, 0,
-                                Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, deviceX, deviceY, 0, 0, Native.SWP_MOVE_ONLY);
         }
 
         public void ApplyPosition()
@@ -410,8 +409,7 @@ namespace Vibespan
             _root.Height = dipH;
             _root.UpdateLayout();
 
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0,
-                                Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, y, 0, 0, Native.SWP_MOVE_ONLY);
         }
 
         int VisibleRowCount()
@@ -592,7 +590,7 @@ namespace Vibespan
             Native.RECT after; CurrentRect(out after);
             int left = anchorRight ? before.Right - after.Width : before.Left;
             int top = anchorBottom ? before.Bottom - after.Height : before.Top;
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, left, top, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, left, top, 0, 0, Native.SWP_MOVE_ONLY);
         }
 
         public void SetScaleAndSave(double s)
@@ -612,7 +610,13 @@ namespace Vibespan
         }
 
         // ---------- topmost / full screen ----------
-        public void EvaluateTopmost()
+        /// <param name="mayRestack">
+        /// False on the idle heartbeat. The heartbeat exists to re-check VISIBILITY - a
+        /// full-screen app can change its own rect without any foreground change - and that is a
+        /// read-only question. Re-stacking on a timer is what turned a rare, event-driven repair
+        /// into a write every three seconds forever.
+        /// </param>
+        public void EvaluateTopmost(bool mayRestack)
         {
             if (_hwnd == IntPtr.Zero) return;
 
@@ -635,6 +639,7 @@ namespace Vibespan
             // re-promoted a uiAccess window across the whole desktop. That is what froze the game:
             // the process stayed alive while its presentation deadlocked on the occlusion change.
             if (fullScreen) return;
+            if (!mayRestack) return;
 
             Native.ReassertTopmost(_hwnd);
         }
