@@ -140,9 +140,19 @@ namespace Vibespan
 
         public static Brush Brush_(Cfg cfg, string token) { return B(Token(cfg, token)); }
 
-        /// <summary>Background with the user's alpha applied on top of the token's RGB.</summary>
+        /// <summary>
+        /// Background with the user's alpha applied on top of the token's RGB.
+        ///
+        /// With the background switched off this returns #01000000 - one step off invisible -
+        /// and NOT Transparent. AllowsTransparency makes a layered window whose hit-testing the
+        /// OS performs from the alpha channel before the message ever reaches the wndproc, so a
+        /// genuinely transparent panel cannot be dragged, right-clicked or resized: the widget
+        /// would still be on screen but nothing could touch it. One unit of alpha is invisible
+        /// to the eye and solid to the mouse. The grip uses the same trick.
+        /// </summary>
         public static Brush BackgroundBrush(Cfg cfg)
         {
+            if (!cfg.ShowBackground) return B("#01000000");
             return B(WithAlpha(Token(cfg, Background), cfg.BackgroundAlpha));
         }
 

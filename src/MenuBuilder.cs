@@ -530,6 +530,7 @@ namespace Vibespan
             m.Items.Add(new Separator());
             m.Items.Add(Toggle(L.MenuShowLogo, C.ShowLogo, delegate (bool on) { C.ShowLogo = on; Changed(false); }));
             m.Items.Add(Toggle(L.MenuShowBorder, C.ShowBorder, delegate (bool on) { C.ShowBorder = on; Changed(false); }));
+            m.Items.Add(Toggle(L.MenuShowBackground, C.ShowBackground, delegate (bool on) { C.ShowBackground = on; Changed(false); }));
             m.Items.Add(new Separator());
             m.Items.Add(Item(L.MenuResetAppearance, delegate
             {
@@ -539,7 +540,7 @@ namespace Vibespan
                 C.Overrides.Clear();
                 C.ContentOpacity = 1.0;
                 C.BackgroundAlpha = 0.95;
-                C.ShowLogo = true; C.ShowBorder = true;
+                C.ShowLogo = true; C.ShowBorder = true; C.ShowBackground = true;
                 C.Orientation = "horizontal";
                 foreach (RowCfg r in C.Rows) r.Accent = null;
                 Changed(true);

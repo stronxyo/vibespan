@@ -113,6 +113,7 @@ namespace Vibespan
         public bool HideFullScreen = true;
         public bool ShowLogo = true;
         public bool ShowBorder = true;
+        public bool ShowBackground = true;
 
         // ---- display mode ----
         // Not a Style and not an Orientation: in hairline mode the window stops being a box
@@ -267,6 +268,7 @@ namespace Vibespan
                 c.ClickThrough = w["clickThrough"].AsBool(false);
                 c.HideFullScreen = w["hideFullScreen"].AsBool(true);
                 c.ShowLogo = w["showLogo"].AsBool(true);
+                c.ShowBackground = w["showBackground"].AsBool(true);
                 c.ShowBorder = w["showBorder"].AsBool(true);
 
                 c.Mode = w["mode"].AsString("widget");
@@ -355,6 +357,7 @@ namespace Vibespan
             w.Set("clickThrough", ClickThrough);
             w.Set("hideFullScreen", HideFullScreen);
             w.Set("showLogo", ShowLogo);
+            w.Set("showBackground", ShowBackground);
             w.Set("showBorder", ShowBorder);
             w.Set("mode", Mode);
             w.Set("hairlineEdge", HairlineEdge);
