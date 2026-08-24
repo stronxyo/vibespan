@@ -36,7 +36,7 @@ row, four themes, size, opacity, orientation, alert thresholds.
   Slim, Card, Terminal — separate from the colour theme, so shape and palette are independent
 - **Font of your choice** — a curated list of what is actually installed, previewed in the
   menu in its own typeface, plus the full system font dialog
-- **Drop the metric title** entirely, per row, and pick the mark (rail / asterisk / dot / none)
+- **Drop the metric title** entirely, per row, and pick the mark (rail / starburst / dot / none)
 - **Three bar styles** — continuous, segmented, blocks
 - **Any metric the API exposes** — 5-hour session, 7-day, per-model weekly (Opus / Sonnet /
   Fable), OAuth apps, Cowork, extra credits, spend — discovered automatically
@@ -46,18 +46,21 @@ row, four themes, size, opacity, orientation, alert thresholds.
 - **Show remaining instead of used**, per row
 - **Resize by dragging the corner** or from the Size menu — the two snap to the same steps
 - **Four themes** including a colour-blind-safe one, plus a custom colour per row
+- **Background, border and logo each switch off** — down to bare text on the desktop
 - **Horizontal or vertical** layout, or **screen-edge hairline** mode — the widget becomes a
   few pixels of line along an edge of the display, one line per metric, no text at all
 - **Threshold alerts** at your chosen percentages, once per window, silent by default
 - **Refresh interval** from 3 to 30 minutes
 - **Gets out of the way of games** — hides while a full-screen app is in front, including
-  borderless-fullscreen, and stops re-asserting topmost so it cannot kick a game out of its
-  display mode. **Only on the affected monitor**: a game on one screen leaves the widget alone
-  on the others
+  borderless-fullscreen, **only on that monitor**: a game on one screen leaves the widget
+  alone on the others. Z-order is never rewritten on a timer and never while anything is
+  presenting full screen, on any monitor — that is what stops a widget freezing a game
 - **Goes visibly stale** — amber then red border, gauges fade — when the data is more than
   12 minutes old, so a frozen number never looks like a fresh one
 - **Tray icon** tinted by your worst limit, which is also how you get the widget back if you
   drag it onto a monitor you later unplug
+- **Same hover read-out** on the widget and the tray — percentages, countdowns, and whether
+  the number was polled or pushed
 - **Optional live feed** from Claude Code (see below) — instant updates, no polling
 - **English, Français, Español, Deutsch**
 
@@ -177,7 +180,7 @@ Right-click the widget. Everything lives there:
   colour
 - **Size** — 75% to 200%, or drag the bottom-right corner (it snaps to the same steps)
 - **Appearance** — **display mode** (widget or screen-edge hairline, with edge and line
-  thickness), style, theme, font, bar style, mark, opacity, orientation, border
+  thickness), style, theme, font, bar style, mark, opacity, orientation, border, background
 - **Alerts** — thresholds, sound, mute for an hour
 - **Behaviour** — full-screen hiding, click-through, autostart, **refresh interval**, live
   feed, bring to centre
@@ -263,13 +266,11 @@ Everything lives in `src\I18n.cs`. Copy one of the blocks, translate the values,
 it to `Catalog`. The language menu and the settings file are both driven by that array, so
 there is nothing else to wire up.
 
-## A note on the Claude mark
+## A note on Anthropic
 
-The `asterisk` mark draws Anthropic's actual Claude glyph, used to identify the service this
-widget reports on. Vibespan is not affiliated with, endorsed by, or sponsored by Anthropic.
-If you would rather not ship a third-party trademark, `Appearance ▸ Mark` offers `rail`,
-`dot` and `none` — and `rail` is the default precisely because the mark is theirs, not this
-project's.
+Vibespan is not affiliated with, endorsed by, or sponsored by Anthropic. No Anthropic
+trademark is drawn or shipped — every mark in the widget, the tray and the icon is
+Vibespan's own.
 
 ## Credits
 
