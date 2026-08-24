@@ -2,13 +2,7 @@
 
 Run from the repo root:  python tools/make-icon.py
 
-Two things here are deliberate and easy to undo by accident.
-
-Size-specific artwork. From 32px up the icon uses the whole mark - starburst, pixel
-dissipation, chevron. At 24px and below that detail is finer than the pixel grid can
-express and the tile turns to mush, so the small entries are cropped to the starburst
-alone, which stays recognisable at any size. Shipping different artwork per size is
-normal icon practice.
+One thing here is deliberate and easy to undo by accident.
 
 DIB rather than PNG below 256. Pillow's own ICO writer emits PNG-compressed entries at
 every size. Windows has accepted those since Vista, but the convention - and what the
@@ -25,13 +19,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE = os.path.join(ROOT, 'VS-Logo-A.png')
 TARGET = os.path.join(ROOT, 'Vibespan.ico')
 
-# Square crops into the 1254x1254 source. The artwork carries ~19% dead margin on every
+# Square crop into the 1254x1254 source. The artwork carries ~19% dead margin on every
 # side, which would otherwise leave the mark a smudge adrift in a cream tile.
+#
+# Every size uses the SAME artwork. An earlier version cropped 24px and below to the
+# starburst alone, on the grounds that the dissipation field cannot resolve on a 16px
+# grid. It cannot - but the dissipation is the logo's whole idea, and a small icon that
+# drops it is a different mark. At tray size the specks read as a soft wash off the
+# right-hand side, which is what the artwork does to the eye regardless.
 FULL_BOX = (123, 87, 1119, 1083)     # whole mark, 11% breathing room
-SMALL_BOX = (95, 205, 855, 965)      # starburst only, for 24px and below
 
 SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-SMALL_UP_TO = 24
 
 
 def dib(img):
@@ -63,12 +61,10 @@ def png(img):
 def main():
     src = Image.open(SOURCE).convert('RGBA')
     full = src.crop(FULL_BOX)
-    small = src.crop(SMALL_BOX)
 
     blobs = []
     for size in SIZES:
-        base = small if size <= SMALL_UP_TO else full
-        frame = base.resize((size, size), Image.LANCZOS)
+        frame = full.resize((size, size), Image.LANCZOS)
         blobs.append(png(frame) if size == 256 else dib(frame))
 
     out = bytearray(struct.pack('<HHH', 0, 1, len(SIZES)))

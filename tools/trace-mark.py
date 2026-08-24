@@ -10,11 +10,16 @@ is measurable rather than a matter of opinion.
 Why vector instead of embedding a PNG: the tray icon is TINTED at run time with the
 colour of the worst current usage level, so a fixed-colour bitmap cannot do the job.
 
-Pipeline: threshold the artwork, keep the largest connected component (the starburst -
-the loose pixel-dissipation squares and the chevron are separate components and are
-deliberately dropped, being finer than a 16px tray icon can express), trace the outline
-with a Moore-neighbour walk, find any enclosed holes and trace those too, simplify with
-Ramer-Douglas-Peucker, then normalise into a 0..100 box so Stretch.Uniform works.
+Pipeline: threshold the artwork, trace EVERY ink component with a Moore-neighbour walk -
+the starburst, all thirty-odd pixel-dissipation squares and the chevron - find any
+enclosed holes and trace those too, simplify with Ramer-Douglas-Peucker, then normalise
+the whole set together into a 0..100 box so Stretch.Uniform works.
+
+An earlier version kept only the largest component on the grounds that the loose squares
+are finer than a 16px tray icon can express. That is true, and it is still the wrong
+call: the dissipation is the logo's whole idea, and a mark that drops it is a different
+mark. The specks fade to a wash at tray size rather than resolving individually, which
+is what the artwork does to the eye anyway.
 """
 import os
 import textwrap
@@ -30,16 +35,17 @@ TARGET = os.path.join(ROOT, 'src', 'Brand.cs')
 INK_THRESHOLD = 60      # channel-sum distance from the flat background
 RDP_EPSILON = 1.4       # px, in source resolution
 MIN_HOLE_PX = 30
+MIN_PART_PX = 60     # drops antialiasing crumbs, keeps every real dissipation square
 
 
-def largest_component(ink):
-    """Label 4-connected components and return a mask of the biggest one."""
-    h, w = ink.shape
-    lab = np.zeros(ink.shape, np.int32)
-    best, best_n, cur = 0, 0, 0
+def label(mask):
+    """Label 4-connected components. Returns (labels, [(size, id), ...] largest first)."""
+    h, w = mask.shape
+    lab = np.zeros(mask.shape, np.int32)
+    found, cur = [], 0
     for y in range(h):
         for x in range(w):
-            if ink[y, x] and lab[y, x] == 0:
+            if mask[y, x] and lab[y, x] == 0:
                 cur += 1
                 q = deque([(y, x)])
                 lab[y, x] = cur
@@ -49,12 +55,12 @@ def largest_component(ink):
                     n += 1
                     for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                         ny, nx = cy + dy, cx + dx
-                        if 0 <= ny < h and 0 <= nx < w and ink[ny, nx] and lab[ny, nx] == 0:
+                        if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and lab[ny, nx] == 0:
                             lab[ny, nx] = cur
                             q.append((ny, nx))
-                if n > best_n:
-                    best_n, best = n, cur
-    return lab == best
+                found.append((n, cur))
+    found.sort(reverse=True)
+    return lab, found
 
 
 def enclosed_holes(mask):
@@ -136,32 +142,44 @@ def fmt(v):
     return s if s not in ('-0', '') else '0'
 
 
+def rings_of(mask, min_px):
+    """Every component outline in `mask`, plus the holes inside each, as (points, is_hole)."""
+    h, w = mask.shape
+    lab, found = label(mask)
+    out = []
+    for n, cid in found:
+        if n < min_px:
+            continue
+        part = (lab == cid)
+        pad = np.zeros((h + 2, w + 2), bool)
+        pad[1:-1, 1:-1] = part
+        out.append((trace(pad, tuple(np.argwhere(pad)[0])), False))
+
+        holes = enclosed_holes(part)
+        if not holes.any():
+            continue
+        hlab, hfound = label(holes)
+        for hn, hid in hfound:
+            if hn < MIN_HOLE_PX:
+                continue
+            hp = np.zeros((h + 2, w + 2), bool)
+            hp[1:-1, 1:-1] = (hlab == hid)
+            out.append((trace(hp, tuple(np.argwhere(hp)[0])), True))
+    return out
+
+
 def main():
     rgb = np.asarray(Image.open(SOURCE).convert('RGB')).astype(int)
     ink = np.abs(rgb - rgb[2, 2]).sum(axis=2) > INK_THRESHOLD
-    mask = largest_component(ink)
 
-    ys, xs = np.nonzero(mask)
-    m = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    h, w = m.shape
+    ys, xs = np.nonzero(ink)
+    m = ink[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
 
-    rings = []
-    pad = np.zeros((h + 2, w + 2), bool)
-    pad[1:-1, 1:-1] = m
-    rings.append(trace(pad, tuple(np.argwhere(pad)[0])))
+    rings = rings_of(m, MIN_PART_PX)
+    simple = [(rdp(r, RDP_EPSILON), hole) for r, hole in rings]
+    solids = sum(1 for _, hole in simple if not hole)
 
-    holes = enclosed_holes(m)
-    if holes.sum() > MIN_HOLE_PX:
-        hole_mask = largest_component(holes)      # only meaningful holes; specks are noise
-        for blob in (hole_mask,):
-            hp = np.zeros((h + 2, w + 2), bool)
-            hp[1:-1, 1:-1] = blob
-            if hp.sum() >= MIN_HOLE_PX:
-                rings.append(trace(hp, tuple(np.argwhere(hp)[0])))
-
-    simple = [rdp(r, RDP_EPSILON) for r in rings]
-
-    allp = np.vstack(simple)
+    allp = np.vstack([r for r, _ in simple])
     ymin, xmin = allp.min(axis=0)
     ymax, xmax = allp.max(axis=0)
     span = max(ymax - ymin, xmax - xmin)
@@ -169,7 +187,7 @@ def main():
     oy = (span - (ymax - ymin)) / 2.0
 
     parts = []
-    for ring in simple:
+    for ring, _ in simple:
         pts = [((px - xmin + ox) / span * 100.0, (py - ymin + oy) / span * 100.0)
                for py, px in ring]
         d = 'M' + fmt(pts[0][0]) + ',' + fmt(pts[0][1])
@@ -177,19 +195,20 @@ def main():
         parts.append(d)
     path = ''.join(parts)
 
-    iou = check(path, m)
-    print('rings %d, %d points, %d chars, IoU %.4f'
-          % (len(simple), sum(len(s) for s in simple), len(path), iou))
+    iou = check(path, [hole for _, hole in simple], m)
+    print('%d shapes (%d solid, %d holes), %d points, %d chars, IoU %.4f'
+          % (len(simple), solids, len(simple) - solids,
+             sum(len(r) for r, _ in simple), len(path), iou))
     if iou < 0.97:
         raise SystemExit('trace drifted from the artwork (IoU %.4f) - not writing' % iou)
 
     body = ('\n' + ' ' * 12 + '+ "').join(c + '"' for c in textwrap.wrap(path, 96))
     with open(TARGET, 'w', newline='\n') as fh:
-        fh.write(TEMPLATE % (iou, 100 * (1 - iou), body))
+        fh.write(TEMPLATE % (solids, iou, 100 * (1 - iou), body))
     print('wrote', os.path.relpath(TARGET, ROOT))
 
 
-def check(path, source_mask):
+def check(path, is_hole, source_mask):
     """Rasterise the emitted path and compare it back to the artwork."""
     n = 512
     img = Image.new('L', (n, n), 0)
@@ -198,7 +217,7 @@ def check(path, source_mask):
         pts = [tuple(float(v) for v in p.split(','))
                for p in ring.rstrip('Z').replace('L', ' ').split()]
         draw.polygon([(x / 100 * n, y / 100 * n) for x, y in pts],
-                     fill=255 if i == 0 else 0)
+                     fill=0 if is_hole[i] else 255)
     got = np.asarray(img) > 127
 
     h, w = source_mask.shape
@@ -214,7 +233,8 @@ TEMPLATE = '''// The Vibespan mark, as vector geometry.
 //
 // GENERATED by tools/trace-mark.py from VS-Logo-A.png - do not hand-edit.
 //
-// Traced rather than eyeballed: the outline is extracted from the artwork, simplified with
+// Traced rather than eyeballed: every outline is extracted from the artwork - the starburst,
+// the full pixel-dissipation field and the chevron, %d shapes in all - simplified with
 // Ramer-Douglas-Peucker, and checked back against the source raster at %.4f IoU (%.2f%% of
 // pixels differ). The generator refuses to write below 0.97, so drift is caught rather than
 // argued about.
