@@ -72,9 +72,15 @@ namespace Vibespan
         /// </summary>
         public static byte[] MarkPng(int px, Brush fill)
         {
+            return GlyphPng(px, fill, ClaudeGeometry);
+        }
+
+        /// <summary>Render any frozen geometry to a square PNG, filled with the given brush.</summary>
+        public static byte[] GlyphPng(int px, Brush fill, Geometry geometry)
+        {
             var path = new System.Windows.Shapes.Path
             {
-                Data = ClaudeGeometry,
+                Data = geometry,
                 Fill = fill,
                 Stretch = Stretch.Uniform,
                 Width = px,

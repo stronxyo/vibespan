@@ -135,9 +135,10 @@ namespace Vibespan
                 var brush = new System.Windows.Media.SolidColorBrush(Theme.C(tintHex ?? "#DA7756"));
                 brush.Freeze();
 
-                // Same vector glyph the widget draws, rendered by WPF and handed to the shell
-                // as a bitmap. Re-drawing it with GDI+ would mean maintaining the mark twice.
-                byte[] png = Gauge.MarkPng(16, brush);
+                // The Vibespan mark, not the Claude one: the widget face shows whose usage is
+                // being reported, but the shell icon identifies the application. Still vector and
+                // still tinted, so the icon keeps carrying the worst current level at a glance.
+                byte[] png = Gauge.GlyphPng(16, brush, Brand.Starburst);
                 using (var ms = new System.IO.MemoryStream(png))
                 using (var bmp = new Bitmap(ms))
                 {
