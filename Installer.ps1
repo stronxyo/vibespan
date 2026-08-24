@@ -46,6 +46,7 @@ try {
     $here = Split-Path -Parent $MyInvocation.MyCommand.Path
     $src  = Join-Path $here 'src'
     $man  = Join-Path $here 'Vibespan.manifest'
+    $ico  = Join-Path $here 'Vibespan.ico'
     if (-not (Test-Path $src)) { Fail "src\ not found next to this script." }
     if (-not (Test-Path $man)) { Fail "Vibespan.manifest not found next to this script." }
 
@@ -104,6 +105,10 @@ try {
         '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', '/r:Microsoft.CSharp.dll',
         "/r:$wpf\PresentationFramework.dll", "/r:$wpf\PresentationCore.dll", "/r:$wpf\WindowsBase.dll"
     ) + $sources
+
+    # The application icon. Optional on purpose: a missing .ico must not stop an install,
+    # it only means the exe falls back to the stock .NET one.
+    if (Test-Path $ico) { $cscArgs = @("/win32icon:$ico") + $cscArgs }
 
     & $csc $cscArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $exe)) { Fail 'Build failed (see messages above).' }
