@@ -29,6 +29,15 @@ namespace Vibespan
         string _lastTint;
         int _lastPct = -1;
 
+        Native.POINT _hoverAnchor;
+        bool _hoverVisible;
+        System.Windows.Threading.DispatcherTimer _hoverWatch;   // leave test
+        System.Windows.Threading.DispatcherTimer _hoverDelay;   // dwell before showing
+
+        const int HoverLeaveSlack = 16;    // px off the anchor before the pointer counts as gone
+        const int HoverPollMs = 40;        // leave test cadence; cheap, it is one GetCursorPos
+        const int HoverShowDelayMs = 350;  // same dwell as the widget's ToolTipService delay
+
         const uint WM_TRAYMOUSEMESSAGE = 0x800;   // WM_USER + 1024, what NotifyIcon uses
 
         public Tray(WidgetWindow win, Func<WpfMenu> menuFactory)
@@ -47,20 +56,98 @@ namespace Vibespan
             }
             catch (Exception e) { Log.Write("UIPI filter failed: " + e.Message); }
 
+            // Text is left EMPTY on purpose. Anything in it makes the shell draw its own
+            // tooltip, which would race and overlap with the card below - and it could not
+            // carry the same content anyway, since NotifyIcon.Text throws past 63 characters.
             _icon = new NotifyIcon
             {
-                Text = "Vibespan",
+                Text = "",
                 Visible = true
             };
             UpdateIcon(null);
 
+            // There is no mouse-leave event for a tray icon. While the pointer is over the icon
+            // MouseMove keeps firing, so the last position is a live anchor; once the events stop
+            // the pointer has gone, and drifting off that anchor is the signal to hide. A pointer
+            // resting motionless on the icon fires nothing either, which is why the leave test
+            // measures distance and not elapsed time.
+            //
+            // The slack is deliberately smaller than one icon: because the anchor is refreshed on
+            // every move, it always sits where the pointer last was ON the icon, so any real
+            // departure clears a short threshold at once. Paired with a fast tick, the card goes
+            // the moment you leave, which is what a tooltip should do.
+            _icon.MouseMove += delegate
+            {
+                Native.POINT p;
+                if (!Native.GetCursorPos(out p)) return;
+                _hoverAnchor = p;
+
+                EnsureHoverTimers();
+                _hoverWatch.Start();                       // leave test runs during the delay too
+
+                // Show on a delay, matching the widget's tooltip, so sweeping the pointer across
+                // the tray on the way somewhere else does not flash the card. Note this does NOT
+                // re-show on every move: once visible the card stays put instead of chasing the
+                // pointer around.
+                if (!_hoverVisible && !_hoverDelay.IsEnabled) _hoverDelay.Start();
+            };
+
             _icon.MouseUp += delegate (object s, MouseEventArgs e)
             {
+                HideHover();
                 if (e.Button == MouseButtons.Right) _win.Dispatcher.BeginInvoke(new Action(ShowMenu));
                 else if (e.Button == MouseButtons.Left) _win.Dispatcher.BeginInvoke(new Action(_win.BringToCentre));
             };
 
             if (_win.Alerts != null) _win.Alerts.BalloonSink = Balloon;
+        }
+
+        void EnsureHoverTimers()
+        {
+            if (_hoverWatch == null)
+            {
+                _hoverWatch = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(HoverPollMs)
+                };
+                _hoverWatch.Tick += delegate { HoverTick(); };
+            }
+            if (_hoverDelay == null)
+            {
+                _hoverDelay = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(HoverShowDelayMs)
+                };
+                _hoverDelay.Tick += delegate
+                {
+                    _hoverDelay.Stop();
+                    _hoverVisible = true;
+                    ShowHover();
+                };
+            }
+        }
+
+        void ShowHover()
+        {
+            string text = _win.CurrentTooltip;
+            if (string.IsNullOrEmpty(text)) return;
+            HoverCard.ShowAt(text, _hoverAnchor.X, _hoverAnchor.Y, _win.CurrentTooltipMetaFrom);
+        }
+
+        void HoverTick()
+        {
+            Native.POINT p;
+            if (!Native.GetCursorPos(out p)) { HideHover(); return; }
+            int dx = p.X - _hoverAnchor.X, dy = p.Y - _hoverAnchor.Y;
+            if (dx * dx + dy * dy > HoverLeaveSlack * HoverLeaveSlack) HideHover();
+        }
+
+        void HideHover()
+        {
+            _hoverVisible = false;
+            if (_hoverDelay != null) _hoverDelay.Stop();     // cancels a hover that never landed
+            if (_hoverWatch != null) _hoverWatch.Stop();
+            HoverCard.HideTray();
         }
 
         void ShowMenu()
@@ -118,10 +205,12 @@ namespace Vibespan
                 }
             }
 
-            // NotifyIcon.Text throws above 63 characters.
-            string text = lines.ToString();
-            if (text.Length > 62) text = text.Substring(0, 62);
-            try { _icon.Text = text; } catch { }
+            // Text stays EMPTY. Setting it makes the shell draw its own tooltip, which then
+            // sits on top of the hover card - two read-outs of the same thing, one of them the
+            // truncated version this class can no longer render properly anyway (NotifyIcon.Text
+            // throws above 63 characters). Emptying it in the constructor was not enough: this
+            // method runs on every snapshot and used to put it straight back.
+            try { _icon.Text = ""; } catch { }
 
             string tint = Theme.PercentHex(cfg, worst, severity);
             int pct = (int)Math.Round(worst);
@@ -160,6 +249,7 @@ namespace Vibespan
 
         public void Dispose()
         {
+            try { HideHover(); HoverCard.Close(); } catch { }
             try
             {
                 if (_icon != null)

@@ -439,6 +439,13 @@ namespace Vibespan
         {
             public FrameworkElement Content;
             public string Tooltip;
+
+            /// <summary>
+            /// Index of the first metadata line in Tooltip - the "updated 15:43 - polled" tail.
+            /// The hover card dims everything from here down so the numbers stay the thing your
+            /// eye lands on. -1 means the whole tooltip is one message.
+            /// </summary>
+            public int TooltipMetaFrom = -1;
         }
 
         public static Rendered BuildMessage(Cfg cfg, string message)
@@ -537,19 +544,24 @@ namespace Vibespan
             foreach (Bucket b in shown)
             {
                 RowCfg r = cfg.Row(b.Key);
-                string line = b.LongLabel + L.Colon + PercentText(b, r);
+                string line = b.Label + "   " + PercentText(b, r);
                 string reset = Fmt.Countdown(b.ResetsAt);
-                if (reset.Length > 0) line += " (" + string.Format(L.ResetsIn, reset) + ")";
-                if (b.IsActive) line += "  • " + L.ActiveLimit;
+                if (reset.Length > 0) line += "   ·   " + string.Format(L.ResetsIn, reset);
                 tips.Add(line);
             }
             if (tips.Count == 0) tips.Add(L.Loading);
+            int metaFrom = tips.Count;
             tips.Add(string.Format(L.Updated, lastOk.ToString("HH:mm")) + "  — " +
                      (snap.Source == Provenance.Feed ? L.SourceLive : L.SourcePolled));
             if (errorCode != null)
                 tips.Add(string.Format(L.FrozenFor, Fmt.Age(DateTime.Now - lastOk), Fmt.ErrorText(errorCode)));
 
-            return new Rendered { Content = host, Tooltip = string.Join(Environment.NewLine, tips.ToArray()) };
+            return new Rendered
+            {
+                Content = host,
+                Tooltip = string.Join(Environment.NewLine, tips.ToArray()),
+                TooltipMetaFrom = metaFrom
+            };
         }
 
         public static Rendered Build(Cfg cfg, Snapshot snap, string errorCode, DateTime lastOk)
@@ -584,18 +596,23 @@ namespace Vibespan
 
                 string pct = PercentText(b, r);
                 string reset = Fmt.Countdown(b.ResetsAt);
-                string line = b.LongLabel + L.Colon + pct;
-                if (reset.Length > 0) line += " (" + string.Format(L.ResetsIn, reset) + ")";
-                if (b.IsActive) line += "  • " + L.ActiveLimit;
+                string line = b.Label + "   " + pct;
+                if (reset.Length > 0) line += "   ·   " + string.Format(L.ResetsIn, reset);
                 tips.Add(line);
             }
 
+            int metaFrom = tips.Count;
             tips.Add(string.Format(L.Updated, lastOk.ToString("HH:mm")) + "  — " +
                      (snap.Source == Provenance.Feed ? L.SourceLive : L.SourcePolled));
             if (errorCode != null)
                 tips.Add(string.Format(L.FrozenFor, Fmt.Age(DateTime.Now - lastOk), Fmt.ErrorText(errorCode)));
 
-            return new Rendered { Content = host, Tooltip = string.Join(Environment.NewLine, tips.ToArray()) };
+            return new Rendered
+            {
+                Content = host,
+                Tooltip = string.Join(Environment.NewLine, tips.ToArray()),
+                TooltipMetaFrom = metaFrom
+            };
         }
     }
 }

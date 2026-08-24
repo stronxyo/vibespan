@@ -48,6 +48,10 @@ namespace Vibespan
         string _lastError;
         DateTime _lastOk = DateTime.MinValue;
         bool _hiddenForFullScreen;
+
+        /// <summary>The hover text, so the tray can show exactly what the widget shows.</summary>
+        public string CurrentTooltip { get; private set; }
+        public int CurrentTooltipMetaFrom { get; private set; }
         bool _positionSettled;
 
         DispatcherTimer _poll, _tick, _feedWatch;
@@ -802,7 +806,21 @@ namespace Vibespan
                         _lastError == null ? L.Loading : string.Format(L.Offline, Fmt.ErrorText(_lastError)));
 
             _slot.Content = r.Content;
-            _root.ToolTip = r.Tooltip;
+            // A raw string here gets WPF's stock tooltip: small, light, system-styled, and
+            // nothing like the rest of the widget. The card is the same one the tray shows.
+            //
+            // Rebuilt only when the text changes. Redraw runs on a timer, and swapping in a new
+            // ToolTip instance while one is open closes it - the card would blink out from under
+            // the pointer once a minute.
+            CurrentTooltipMetaFrom = r.TooltipMetaFrom;
+            if (r.Tooltip != CurrentTooltip || _root.ToolTip == null)
+            {
+                CurrentTooltip = r.Tooltip;
+                _root.ToolTip = HoverCard.Tip(r.Tooltip, r.TooltipMetaFrom);
+                // The stock 5 s auto-hide is short for three lines of numbers.
+                ToolTipService.SetShowDuration(_root, 20000);
+                ToolTipService.SetInitialShowDelay(_root, 350);
+            }
 
             // Past two missed cycles the numbers on screen mean nothing, so make the stall
             // visible rather than letting a frozen value pass for a fresh one.
